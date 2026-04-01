@@ -40,5 +40,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# Firebase Functions compiled output
+# Firebase Functions
 /functions/lib
+/functions/node_modules
