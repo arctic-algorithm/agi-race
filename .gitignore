@@ -43,3 +43,4 @@ next-env.d.ts
 # Firebase Functions
 /functions/lib
 /functions/node_modules
+.claude/
