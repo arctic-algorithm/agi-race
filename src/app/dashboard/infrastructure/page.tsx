@@ -484,6 +484,7 @@ export default function InfrastructurePage() {
       type: 'buy_facility',
       payload: { facilityType },
       createdAt: Date.now(),
+      processed: false,
     })
   }
 
@@ -498,6 +499,7 @@ export default function InfrastructurePage() {
       type: 'buy_rack',
       payload: { rackType, facilityId },
       createdAt: Date.now(),
+      processed: false,
     })
   }
 

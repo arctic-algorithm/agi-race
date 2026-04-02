@@ -73,6 +73,20 @@ export interface PlayerDoc {
   revenuePerDay?: number
   costsPerDay?: number
   lastTickAt?: number
+  lastTickBreakdown?: {
+    revenue: {
+      total: number
+      bySlot: { market: string; modelVersion: number; revenuePerToken: number; tokensPerDay: number; amount: number }[]
+    }
+    costs: {
+      total: number
+      cloudRental: number
+      facilityMaintenance: number
+      energyMaintenance: number
+      debtInterest: number
+    }
+    profit: number
+  }
 }
 
 // ─── /players/{playerId}/facilities/{facilityId} ──────────────────────────────

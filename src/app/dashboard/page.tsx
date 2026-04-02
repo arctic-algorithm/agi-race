@@ -198,6 +198,63 @@ export default function DashboardPage() {
         </Link>
       </div>
 
+      {/* P&L Breakdown */}
+      {player.lastTickBreakdown && (
+        <div className="border border-zinc-700 rounded-sm bg-zinc-800/30 p-4 font-mono text-xs">
+          <p className="text-zinc-500 tracking-widest uppercase mb-3">P&L Breakdown — Last Tick</p>
+          <div className="flex flex-col gap-1">
+            <p className="text-zinc-500 uppercase tracking-wider text-[10px] mt-1">Revenue</p>
+            {player.lastTickBreakdown.revenue.bySlot.map((slot, i) => (
+              <div key={i} className="flex justify-between pl-2">
+                <span className="text-zinc-400">{slot.market} (model v{slot.modelVersion}) @ ${slot.revenuePerToken.toFixed(4)}/token</span>
+                <span className="text-green-400">+{formatMoney(Math.round(slot.amount))}</span>
+              </div>
+            ))}
+            <div className="flex justify-between border-t border-zinc-700 pt-1 mt-1">
+              <span className="text-zinc-300">Total Revenue</span>
+              <span className="text-green-400">+{formatMoney(Math.round(player.lastTickBreakdown.revenue.total))}</span>
+            </div>
+
+            <p className="text-zinc-500 uppercase tracking-wider text-[10px] mt-3">Costs</p>
+            {player.lastTickBreakdown.costs.cloudRental > 0 && (
+              <div className="flex justify-between pl-2">
+                <span className="text-zinc-400">Cloud Rental</span>
+                <span className="text-red-400">−{formatMoney(Math.round(player.lastTickBreakdown.costs.cloudRental))}</span>
+              </div>
+            )}
+            {player.lastTickBreakdown.costs.facilityMaintenance > 0 && (
+              <div className="flex justify-between pl-2">
+                <span className="text-zinc-400">Facility Maintenance</span>
+                <span className="text-red-400">−{formatMoney(Math.round(player.lastTickBreakdown.costs.facilityMaintenance))}</span>
+              </div>
+            )}
+            {player.lastTickBreakdown.costs.energyMaintenance > 0 && (
+              <div className="flex justify-between pl-2">
+                <span className="text-zinc-400">Energy Maintenance</span>
+                <span className="text-red-400">−{formatMoney(Math.round(player.lastTickBreakdown.costs.energyMaintenance))}</span>
+              </div>
+            )}
+            {player.lastTickBreakdown.costs.debtInterest > 0 && (
+              <div className="flex justify-between pl-2">
+                <span className="text-zinc-400">Debt Interest</span>
+                <span className="text-red-400">−{formatMoney(Math.round(player.lastTickBreakdown.costs.debtInterest))}</span>
+              </div>
+            )}
+            <div className="flex justify-between border-t border-zinc-700 pt-1 mt-1">
+              <span className="text-zinc-300">Total Costs</span>
+              <span className="text-red-400">−{formatMoney(Math.round(player.lastTickBreakdown.costs.total))}</span>
+            </div>
+
+            <div className="flex justify-between border-t border-zinc-600 pt-2 mt-2">
+              <span className="text-zinc-200 font-bold">Net Profit / Day</span>
+              <span className={player.lastTickBreakdown.profit >= 0 ? 'text-green-400 font-bold' : 'text-red-400 font-bold'}>
+                {player.lastTickBreakdown.profit >= 0 ? '+' : '−'}{formatMoney(Math.abs(Math.round(player.lastTickBreakdown.profit)))}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Status footer */}
       <div className="mt-auto border-t border-zinc-800 pt-4 flex items-center justify-between">
         <p className="font-mono text-xs text-zinc-600 tracking-wider">

@@ -471,11 +471,13 @@ export const gameTick = onSchedule('every 1 minutes', async () => {
 
         // Split tokens evenly across product slots (or by slot weight if future spec defines it)
         const numSlots = activeProducts.length
+        const revenueBySlot: { market: string; modelVersion: number; revenuePerToken: number; tokensPerDay: number; amount: number }[] = []
         if (numSlots > 0) {
           const tokensPerSlot = tokensToProducts / numSlots
           for (const product of activeProducts) {
             const revenueThisTick = tokensPerSlot * product.revenuePerToken
             totalRevenueThisTick += revenueThisTick
+            revenueBySlot.push({ market: product.market, modelVersion: product.modelVersion, revenuePerToken: product.revenuePerToken, tokensPerDay: tokensPerSlot, amount: revenueThisTick })
           }
         }
 
@@ -493,11 +495,16 @@ export const gameTick = onSchedule('every 1 minutes', async () => {
 
         const daysPerMonth = GLOBAL_CONFIG.daysPerMonth
         let totalCostsThisTick = 0
+        let cloudRentalCostThisTick = 0
+        let facilityMaintenanceCostThisTick = 0
+        let energyMaintenanceCostThisTick = 0
+        let debtInterestCostThisTick = 0
 
         // Cloud rental cost (only when using cloud rental, i.e. no owned racks)
         if (!hasOwnedRacks) {
           const cloudCostPerMonth = cloudRentalTps * CLOUD_CONFIG.baseCostPerTps
-          totalCostsThisTick += cloudCostPerMonth / daysPerMonth
+          cloudRentalCostThisTick = cloudCostPerMonth / daysPerMonth
+          totalCostsThisTick += cloudRentalCostThisTick
         }
 
         // Facility maintenance
@@ -509,17 +516,19 @@ export const gameTick = onSchedule('every 1 minutes', async () => {
         let totalFacilityMaintenance = 0
         for (const fdoc of activeFacilitiesSnap.docs) {
           const facility = fdoc.data() as FacilityDoc
-          // Use stored monthlyMaintenance if present; otherwise 0
           totalFacilityMaintenance += facility.monthlyMaintenance ?? 0
         }
-        totalCostsThisTick += totalFacilityMaintenance / daysPerMonth
+        facilityMaintenanceCostThisTick = totalFacilityMaintenance / daysPerMonth
+        totalCostsThisTick += facilityMaintenanceCostThisTick
 
         // Energy building maintenance
-        totalCostsThisTick += totalEnergyMaintenance / daysPerMonth
+        energyMaintenanceCostThisTick = totalEnergyMaintenance / daysPerMonth
+        totalCostsThisTick += energyMaintenanceCostThisTick
 
         // Debt interest
         const debt = player.debt ?? 0
-        totalCostsThisTick += (debt * DEBT_CONFIG.monthlyInterestRate) / daysPerMonth
+        debtInterestCostThisTick = (debt * DEBT_CONFIG.monthlyInterestRate) / daysPerMonth
+        totalCostsThisTick += debtInterestCostThisTick
 
         // Apply costs
         const moneyAfterRevenue = (playerUpdates['money'] as number)
@@ -657,9 +666,20 @@ export const gameTick = onSchedule('every 1 minutes', async () => {
           await batch.commit()
         }
 
-        // Store per-day estimates for dashboard display (1 tick = 1 game day)
+        // Store per-day estimates + breakdown for dashboard display
         playerUpdates['revenuePerDay'] = totalRevenueThisTick
         playerUpdates['costsPerDay'] = totalCostsThisTick
+        playerUpdates['lastTickBreakdown'] = {
+          revenue: { total: totalRevenueThisTick, bySlot: revenueBySlot },
+          costs: {
+            total: totalCostsThisTick,
+            cloudRental: cloudRentalCostThisTick,
+            facilityMaintenance: facilityMaintenanceCostThisTick,
+            energyMaintenance: energyMaintenanceCostThisTick,
+            debtInterest: debtInterestCostThisTick,
+          },
+          profit: totalRevenueThisTick - totalCostsThisTick,
+        }
 
         logger.info(`Tick complete for player ${playerId}`, {
           effectiveTps,
