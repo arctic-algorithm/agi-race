@@ -102,6 +102,19 @@ export default function DashboardPage() {
           value={`Products ${player.allocation.products}% / Research ${player.allocation.research}% / Training ${player.allocation.training}%`}
           small
         />
+        {player.revenuePerDay !== undefined && (
+          <StatCard label="Revenue / Day" value={formatMoney(Math.round(player.revenuePerDay))} highlight />
+        )}
+        {player.costsPerDay !== undefined && (
+          <StatCard label="Costs / Day" value={formatMoney(Math.round(player.costsPerDay))} />
+        )}
+        {player.revenuePerDay !== undefined && player.costsPerDay !== undefined && (
+          <StatCard
+            label="Profit / Day"
+            value={formatMoney(Math.round(player.revenuePerDay - player.costsPerDay))}
+            highlight={player.revenuePerDay >= player.costsPerDay}
+          />
+        )}
       </div>
 
       {/* Navigation */}

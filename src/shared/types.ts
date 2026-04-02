@@ -69,6 +69,9 @@ export interface PlayerDoc {
   stockPrice: number
   debt: number
   createdAt: number // Unix ms timestamp
+  // Set by tick — used for dashboard display
+  revenuePerDay?: number
+  costsPerDay?: number
 }
 
 // ─── /players/{playerId}/facilities/{facilityId} ──────────────────────────────
