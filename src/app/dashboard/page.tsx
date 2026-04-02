@@ -258,7 +258,7 @@ export default function DashboardPage() {
       {/* Status footer */}
       <div className="mt-auto border-t border-zinc-800 pt-4 flex items-center justify-between">
         <p className="font-mono text-xs text-zinc-600 tracking-wider">
-          LIVE — Real-time Firestore listener active
+          LIVE — Real-time Firestore listener active &nbsp;·&nbsp; v0.4
         </p>
         <p className="font-mono text-xs tracking-wider">
           <span className="text-zinc-600">NEXT TICK </span>
