@@ -13,6 +13,21 @@ function formatMoney(n: number): string {
   return '$' + n.toLocaleString('en-US')
 }
 
+function useTickCountdown(lastTickAt: number | undefined): number {
+  const [seconds, setSeconds] = useState(60)
+  useEffect(() => {
+    if (!lastTickAt) return
+    const update = () => {
+      const elapsed = Math.floor((Date.now() - lastTickAt) / 1000)
+      setSeconds(Math.max(0, 60 - elapsed))
+    }
+    update()
+    const id = setInterval(update, 1000)
+    return () => clearInterval(id)
+  }, [lastTickAt])
+  return seconds
+}
+
 export default function DashboardPage() {
   const { user, loading } = useAuth()
   const router = useRouter()
@@ -41,6 +56,8 @@ export default function DashboardPage() {
 
     return unsubscribe
   }, [user, router])
+
+  const tickCountdown = useTickCountdown(player?.lastTickAt)
 
   async function handleSignOut() {
     await signOut(auth)
@@ -182,9 +199,15 @@ export default function DashboardPage() {
       </div>
 
       {/* Status footer */}
-      <div className="mt-auto border-t border-zinc-800 pt-4">
+      <div className="mt-auto border-t border-zinc-800 pt-4 flex items-center justify-between">
         <p className="font-mono text-xs text-zinc-600 tracking-wider">
           LIVE — Real-time Firestore listener active
+        </p>
+        <p className="font-mono text-xs tracking-wider">
+          <span className="text-zinc-600">NEXT TICK </span>
+          <span className={tickCountdown <= 5 ? 'text-green-400 animate-pulse' : 'text-zinc-400'}>
+            {tickCountdown}s
+          </span>
         </p>
       </div>
     </div>

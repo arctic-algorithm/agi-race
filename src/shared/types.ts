@@ -72,6 +72,7 @@ export interface PlayerDoc {
   // Set by tick — used for dashboard display
   revenuePerDay?: number
   costsPerDay?: number
+  lastTickAt?: number
 }
 
 // ─── /players/{playerId}/facilities/{facilityId} ──────────────────────────────

@@ -241,7 +241,6 @@ export const gameTick = onSchedule('every 1 minutes', async () => {
         const actionsSnap = await db
           .collection(`players/${playerId}/actions`)
           .where('processed', '==', false)
-          .orderBy('createdAt', 'asc')
           .get()
 
         let workingMoney = player.money ?? 0
