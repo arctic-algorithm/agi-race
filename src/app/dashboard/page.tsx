@@ -116,6 +116,36 @@ export default function DashboardPage() {
         >
           Infrastructure →
         </Link>
+        <Link
+          href="/dashboard/energy"
+          className="
+            font-mono text-xs px-4 py-2 border border-zinc-600 rounded-sm
+            text-zinc-300 hover:border-green-500 hover:text-green-400
+            transition-colors duration-150
+          "
+        >
+          Energy →
+        </Link>
+        <Link
+          href="/dashboard/allocation"
+          className="
+            font-mono text-xs px-4 py-2 border border-zinc-600 rounded-sm
+            text-zinc-300 hover:border-green-500 hover:text-green-400
+            transition-colors duration-150
+          "
+        >
+          Allocation →
+        </Link>
+        <Link
+          href="/dashboard/leaderboard"
+          className="
+            font-mono text-xs px-4 py-2 border border-zinc-600 rounded-sm
+            text-zinc-300 hover:border-green-500 hover:text-green-400
+            transition-colors duration-150
+          "
+        >
+          Leaderboard →
+        </Link>
       </div>
 
       {/* Status footer */}
