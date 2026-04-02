@@ -57,6 +57,7 @@ interface TokenAllocation {
 
 interface PlayerDoc {
   companyName: string
+  market?: string
   money: number
   talentCount: number
   researchScore: number
@@ -305,6 +306,19 @@ export const gameTick = onSchedule('every 1 minutes', async () => {
 
         for (const pdoc of productsSnap.docs) {
           activeProducts.push(pdoc.data() as ProductDoc)
+        }
+
+        // Auto-create default product doc if none exist (handles players created before this fix)
+        if (activeProducts.length === 0) {
+          const defaultMarket = player.market ?? 'consumer'
+          const defaultRevenuePerToken = defaultMarket === 'enterprise' ? 0.005 : 0.001
+          const defaultProductRef = db.doc(`players/${playerId}/products/${defaultMarket}`)
+          subUpdates.set(defaultProductRef, {
+            data: { market: defaultMarket, modelVersion: 0, revenuePerToken: defaultRevenuePerToken, tokensAllocated: 0 },
+            isNew: true,
+          })
+          activeProducts.push({ market: defaultMarket, modelVersion: 0, revenuePerToken: defaultRevenuePerToken, tokensAllocated: 0 })
+          logger.info(`Auto-created missing product doc for player ${playerId} (market: ${defaultMarket})`)
         }
 
         // Split tokens evenly across product slots (or by slot weight if future spec defines it)

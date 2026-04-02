@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation'
 import { doc, setDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
-import { GLOBAL_CONFIG } from '@/shared/config'
-import type { Market, PlayerDoc } from '@/shared/types'
+import { GLOBAL_CONFIG, PRODUCT_CONFIG } from '@/shared/config'
+import type { Market, PlayerDoc, ProductDoc } from '@/shared/types'
 
 const MARKETS: { value: Market; label: string; description: string }[] = [
   {
@@ -59,6 +59,16 @@ export default function OnboardingPage() {
       }
 
       await setDoc(doc(db, 'players', user.uid), playerDoc)
+
+      // Create initial product slot for chosen market
+      const productDoc: ProductDoc = {
+        market: selected,
+        modelVersion: 0,
+        revenuePerToken: PRODUCT_CONFIG[selected].revenuePerToken,
+        tokensAllocated: 0,
+      }
+      await setDoc(doc(db, 'players', user.uid, 'products', selected), productDoc)
+
       router.replace('/dashboard')
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to create player'
