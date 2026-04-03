@@ -8,6 +8,13 @@ import {
   doc,
   onSnapshot,
   addDoc,
+  writeBatch,
+  getDocs,
+  query,
+  where,
+  getDoc,
+  increment,
+  updateDoc,
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
@@ -588,33 +595,45 @@ export default function InfrastructurePage() {
 
   async function handlePause(assetCollection: string, docId: string) {
     if (!user) return
-    await addDoc(collection(db, 'players', user.uid, 'actions'), {
-      type: 'pause_asset',
-      payload: { assetCollection, docId },
-      createdAt: Date.now(),
-      processed: false,
-    })
+    const batch = writeBatch(db)
+    batch.update(doc(db, 'players', user.uid, assetCollection, docId), { status: 'offline' })
+    if (assetCollection === 'facilities') {
+      const racksSnap = await getDocs(query(collection(db, 'players', user.uid, 'racks'), where('facilityId', '==', docId)))
+      racksSnap.docs.forEach(r => { if (r.data().status === 'active') batch.update(r.ref, { status: 'offline' }) })
+    }
+    await batch.commit()
   }
 
   async function handleUnpause(assetCollection: string, docId: string) {
     if (!user) return
-    await addDoc(collection(db, 'players', user.uid, 'actions'), {
-      type: 'unpause_asset',
-      payload: { assetCollection, docId },
-      createdAt: Date.now(),
-      processed: false,
-    })
+    const batch = writeBatch(db)
+    batch.update(doc(db, 'players', user.uid, assetCollection, docId), { status: 'active' })
+    if (assetCollection === 'facilities') {
+      const racksSnap = await getDocs(query(collection(db, 'players', user.uid, 'racks'), where('facilityId', '==', docId)))
+      racksSnap.docs.forEach(r => { if (r.data().status === 'offline') batch.update(r.ref, { status: 'active' }) })
+    }
+    await batch.commit()
   }
 
   async function handleSell(assetCollection: string, docId: string) {
     if (!user) return
-    showToast('Sell order placed — processing next tick')
-    await addDoc(collection(db, 'players', user.uid, 'actions'), {
-      type: 'sell_asset',
-      payload: { assetCollection, docId },
-      createdAt: Date.now(),
-      processed: false,
-    })
+    const assetRef = doc(db, 'players', user.uid, assetCollection, docId)
+    const assetSnap = await getDoc(assetRef)
+    if (!assetSnap.exists()) return
+    const refund = ((assetSnap.data().buildCost ?? 0) * 0.5)
+    const batch = writeBatch(db)
+    batch.delete(assetRef)
+    if (refund > 0) batch.update(doc(db, 'players', user.uid), { money: increment(refund) })
+    if (assetCollection === 'facilities') {
+      const racksSnap = await getDocs(query(collection(db, 'players', user.uid, 'racks'), where('facilityId', '==', docId)))
+      racksSnap.docs.forEach(r => batch.delete(r.ref))
+    }
+    if (assetCollection === 'racks') {
+      const facilityId = assetSnap.data().facilityId as string
+      if (facilityId) batch.update(doc(db, 'players', user.uid, 'facilities', facilityId), { racksInstalled: increment(-1) })
+    }
+    await batch.commit()
+    showToast(refund > 0 ? `Sold — +$${Math.round(refund).toLocaleString('en-US')} refunded` : 'Sold')
   }
 
   // Build a map for fast facility lookup by id

@@ -8,6 +8,10 @@ import {
   doc,
   onSnapshot,
   addDoc,
+  writeBatch,
+  getDoc,
+  increment,
+  updateDoc,
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
@@ -481,33 +485,25 @@ export default function EnergyPage() {
 
   async function handlePause(assetCollection: string, docId: string) {
     if (!user) return
-    await addDoc(collection(db, 'players', user.uid, 'actions'), {
-      type: 'pause_asset',
-      payload: { assetCollection, docId },
-      createdAt: Date.now(),
-      processed: false,
-    })
+    await updateDoc(doc(db, 'players', user.uid, assetCollection, docId), { status: 'offline' })
   }
 
   async function handleUnpause(assetCollection: string, docId: string) {
     if (!user) return
-    await addDoc(collection(db, 'players', user.uid, 'actions'), {
-      type: 'unpause_asset',
-      payload: { assetCollection, docId },
-      createdAt: Date.now(),
-      processed: false,
-    })
+    await updateDoc(doc(db, 'players', user.uid, assetCollection, docId), { status: 'active' })
   }
 
   async function handleSell(assetCollection: string, docId: string) {
     if (!user) return
-    showToast('Sell order placed — processing next tick')
-    await addDoc(collection(db, 'players', user.uid, 'actions'), {
-      type: 'sell_asset',
-      payload: { assetCollection, docId },
-      createdAt: Date.now(),
-      processed: false,
-    })
+    const assetRef = doc(db, 'players', user.uid, assetCollection, docId)
+    const assetSnap = await getDoc(assetRef)
+    if (!assetSnap.exists()) return
+    const refund = (assetSnap.data().buildCost ?? 0) * 0.5
+    const batch = writeBatch(db)
+    batch.delete(assetRef)
+    if (refund > 0) batch.update(doc(db, 'players', user.uid), { money: increment(refund) })
+    await batch.commit()
+    showToast(refund > 0 ? `Sold — +$${Math.round(refund).toLocaleString('en-US')} refunded` : 'Sold')
   }
 
   async function handlePurchase(buildingType: EnergyBuildingType) {
