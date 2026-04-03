@@ -28,6 +28,33 @@ function useTickCountdown(lastTickAt: number | undefined): number {
   return seconds
 }
 
+function useInterpolatedStats(player: PlayerDoc | null): { money: number; researchScore: number } {
+  const [stats, setStats] = useState({ money: 0, researchScore: 0 })
+
+  useEffect(() => {
+    if (!player) return
+    setStats({ money: player.money, researchScore: player.researchScore })
+
+    const profitPerDay = (player.revenuePerDay ?? 0) - (player.costsPerDay ?? 0)
+    const researchPerDay = player.tokensPerSec * (player.allocation.research / 100) * 60
+
+    if (profitPerDay === 0 && researchPerDay === 0) return
+
+    const id = setInterval(() => {
+      if (!player.lastTickAt) return
+      const elapsedDays = (Date.now() - player.lastTickAt) / (60 * 1000)
+      setStats({
+        money: player.money + profitPerDay * elapsedDays,
+        researchScore: player.researchScore + researchPerDay * elapsedDays,
+      })
+    }, 1000)
+
+    return () => clearInterval(id)
+  }, [player])
+
+  return stats
+}
+
 export default function DashboardPage() {
   const { user, loading } = useAuth()
   const router = useRouter()
@@ -58,6 +85,7 @@ export default function DashboardPage() {
   }, [user, router])
 
   const tickCountdown = useTickCountdown(player?.lastTickAt)
+  const interpolated = useInterpolatedStats(player)
 
   async function handleSignOut() {
     await signOut(auth)
@@ -101,7 +129,7 @@ export default function DashboardPage() {
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <StatCard label="Company" value={player.companyName} />
-        <StatCard label="Balance" value={formatMoney(player.money)} highlight />
+        <StatCard label="Balance" value={formatMoney(Math.round(interpolated.money))} highlight />
         <StatCard
           label="Market"
           value={player.market === 'consumer' ? 'Consumer' : 'Enterprise'}
@@ -112,7 +140,7 @@ export default function DashboardPage() {
         />
         <StatCard
           label="Research Score"
-          value={player.researchScore.toLocaleString('en-US')}
+          value={Math.round(interpolated.researchScore).toLocaleString('en-US')}
         />
         <StatCard
           label="Token Allocation"
