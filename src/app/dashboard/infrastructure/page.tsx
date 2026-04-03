@@ -76,6 +76,7 @@ function FacilityRow({
 }) {
   const isBuilding = facility.status === 'building'
   const isOffline = facility.status === 'offline'
+  const isPaused = facility.status === 'paused'
   return (
     <tr className="border-t border-zinc-700 hover:bg-zinc-800/40">
       <td className="py-2 px-3 font-mono text-sm text-zinc-100">
@@ -88,6 +89,8 @@ function FacilityRow({
           </span>
         ) : isOffline ? (
           <span className="text-red-400">Offline — balance depleted</span>
+        ) : isPaused ? (
+          <span className="text-amber-400">Paused</span>
         ) : (
           <span className="text-green-400">Active</span>
         )}
@@ -99,10 +102,10 @@ function FacilityRow({
         {!isBuilding && (
           <div className="flex items-center gap-2">
             <button
-              onClick={() => isOffline ? onUnpause(facility.id) : onPause(facility.id)}
+              onClick={() => isPaused ? onUnpause(facility.id) : onPause(facility.id)}
               className="font-mono text-xs px-2 py-1 border rounded-sm transition-colors border-zinc-600 text-zinc-400 hover:border-zinc-300 hover:text-zinc-100"
             >
-              {isOffline ? 'Unpause' : 'Pause'}
+              {isPaused ? 'Unpause' : 'Pause'}
             </button>
             {confirmSell === facility.id ? (
               <button
@@ -147,6 +150,7 @@ function RackRow({
 }) {
   const isDelivering = rack.status === 'delivering'
   const isOffline = rack.status === 'offline'
+  const isPaused = rack.status === 'paused'
   const facilityDoc = facilityMap.get(rack.facilityId)
 
   let statusEl: React.ReactNode
@@ -158,6 +162,8 @@ function RackRow({
     )
   } else if (isOffline) {
     statusEl = <span className="text-red-400">Offline</span>
+  } else if (isPaused) {
+    statusEl = <span className="text-amber-400">Paused</span>
   } else {
     statusEl = <span className="text-green-400">Active</span>
   }
@@ -181,10 +187,10 @@ function RackRow({
         {!isDelivering && (
           <div className="flex items-center gap-2">
             <button
-              onClick={() => isOffline ? onUnpause(rack.id) : onPause(rack.id)}
+              onClick={() => isPaused ? onUnpause(rack.id) : onPause(rack.id)}
               className="font-mono text-xs px-2 py-1 border rounded-sm transition-colors border-zinc-600 text-zinc-400 hover:border-zinc-300 hover:text-zinc-100"
             >
-              {isOffline ? 'Unpause' : 'Pause'}
+              {isPaused ? 'Unpause' : 'Pause'}
             </button>
             {confirmSell === rack.id ? (
               <button
@@ -596,10 +602,10 @@ export default function InfrastructurePage() {
   async function handlePause(assetCollection: string, docId: string) {
     if (!user) return
     const batch = writeBatch(db)
-    batch.update(doc(db, 'players', user.uid, assetCollection, docId), { status: 'offline' })
+    batch.update(doc(db, 'players', user.uid, assetCollection, docId), { status: 'paused' })
     if (assetCollection === 'facilities') {
       const racksSnap = await getDocs(query(collection(db, 'players', user.uid, 'racks'), where('facilityId', '==', docId)))
-      racksSnap.docs.forEach(r => { if (r.data().status === 'active') batch.update(r.ref, { status: 'offline' }) })
+      racksSnap.docs.forEach(r => { if (r.data().status === 'active') batch.update(r.ref, { status: 'paused' }) })
     }
     await batch.commit()
   }
@@ -610,7 +616,7 @@ export default function InfrastructurePage() {
     batch.update(doc(db, 'players', user.uid, assetCollection, docId), { status: 'active' })
     if (assetCollection === 'facilities') {
       const racksSnap = await getDocs(query(collection(db, 'players', user.uid, 'racks'), where('facilityId', '==', docId)))
-      racksSnap.docs.forEach(r => { if (r.data().status === 'offline') batch.update(r.ref, { status: 'active' }) })
+      racksSnap.docs.forEach(r => { if (r.data().status === 'paused') batch.update(r.ref, { status: 'active' }) })
     }
     await batch.commit()
   }
@@ -620,7 +626,14 @@ export default function InfrastructurePage() {
     const assetRef = doc(db, 'players', user.uid, assetCollection, docId)
     const assetSnap = await getDoc(assetRef)
     if (!assetSnap.exists()) return
-    const refund = ((assetSnap.data().buildCost ?? 0) * 0.5)
+    const data = assetSnap.data()
+    // Fall back to config if buildCost wasn't stored on older docs
+    let buildCost = data.buildCost as number | undefined
+    if (!buildCost) {
+      if (assetCollection === 'facilities') buildCost = FACILITY_CONFIG[data.type as FacilityType]?.buildCost ?? 0
+      else if (assetCollection === 'racks') buildCost = RACK_CONFIG[data.type as RackType]?.buildCost ?? 0
+    }
+    const refund = (buildCost ?? 0) * 0.5
     const batch = writeBatch(db)
     batch.delete(assetRef)
     if (refund > 0) batch.update(doc(db, 'players', user.uid), { money: increment(refund) })
@@ -629,7 +642,7 @@ export default function InfrastructurePage() {
       racksSnap.docs.forEach(r => batch.delete(r.ref))
     }
     if (assetCollection === 'racks') {
-      const facilityId = assetSnap.data().facilityId as string
+      const facilityId = data.facilityId as string
       if (facilityId) batch.update(doc(db, 'players', user.uid, 'facilities', facilityId), { racksInstalled: increment(-1) })
     }
     await batch.commit()

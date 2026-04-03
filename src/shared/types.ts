@@ -5,8 +5,8 @@
 
 export type Market = 'consumer' | 'enterprise'
 
-export type BuildStatus = 'building' | 'active' | 'offline'
-export type RackStatus = 'delivering' | 'active' | 'offline'
+export type BuildStatus = 'building' | 'active' | 'offline' | 'paused'
+export type RackStatus = 'delivering' | 'active' | 'offline' | 'paused'
 export type TrainingRunStatus = 'active' | 'idle'
 
 export type FacilityType =

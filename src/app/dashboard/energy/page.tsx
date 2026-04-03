@@ -210,6 +210,7 @@ function BuildingRow({
 }) {
   const isBuilding = building.status === 'building'
   const isOffline = building.status === 'offline'
+  const isPaused = building.status === 'paused'
 
   return (
     <tr className="border-t border-zinc-700 hover:bg-zinc-800/40">
@@ -223,12 +224,14 @@ function BuildingRow({
           </span>
         ) : isOffline ? (
           <span className="text-red-400">OFFLINE — balance depleted</span>
+        ) : isPaused ? (
+          <span className="text-amber-400">PAUSED</span>
         ) : (
           <span className="text-green-400">ACTIVE</span>
         )}
       </td>
       <td className="py-2 px-3 font-mono text-sm text-zinc-300">
-        {isBuilding || isOffline ? (
+        {isBuilding || isOffline || isPaused ? (
           <span className="text-zinc-500">—</span>
         ) : (
           `${formatUnits(building.outputUnits)} units`
@@ -241,10 +244,10 @@ function BuildingRow({
         {!isBuilding && (
           <div className="flex items-center gap-2">
             <button
-              onClick={() => isOffline ? onUnpause('energyBuildings', building.id) : onPause('energyBuildings', building.id)}
+              onClick={() => isPaused ? onUnpause('energyBuildings', building.id) : onPause('energyBuildings', building.id)}
               className="font-mono text-xs px-2 py-1 border rounded-sm transition-colors border-zinc-600 text-zinc-400 hover:border-zinc-300 hover:text-zinc-100"
             >
-              {isOffline ? 'Unpause' : 'Pause'}
+              {isPaused ? 'Unpause' : 'Pause'}
             </button>
             {confirmSell === building.id ? (
               <button
@@ -485,7 +488,7 @@ export default function EnergyPage() {
 
   async function handlePause(assetCollection: string, docId: string) {
     if (!user) return
-    await updateDoc(doc(db, 'players', user.uid, assetCollection, docId), { status: 'offline' })
+    await updateDoc(doc(db, 'players', user.uid, assetCollection, docId), { status: 'paused' })
   }
 
   async function handleUnpause(assetCollection: string, docId: string) {
@@ -498,7 +501,12 @@ export default function EnergyPage() {
     const assetRef = doc(db, 'players', user.uid, assetCollection, docId)
     const assetSnap = await getDoc(assetRef)
     if (!assetSnap.exists()) return
-    const refund = (assetSnap.data().buildCost ?? 0) * 0.5
+    const data = assetSnap.data()
+    // Fall back to config if buildCost wasn't stored on older docs
+    const buildCost = (data.buildCost as number | undefined)
+      ?? ENERGY_BUILDING_CONFIG[data.type as EnergyBuildingType]?.buildCost
+      ?? 0
+    const refund = buildCost * 0.5
     const batch = writeBatch(db)
     batch.delete(assetRef)
     if (refund > 0) batch.update(doc(db, 'players', user.uid), { money: increment(refund) })
