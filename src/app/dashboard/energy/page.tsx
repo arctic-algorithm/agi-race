@@ -174,6 +174,7 @@ function BuildingRow({
   building: EnergyBuildingDoc & { id: string }
 }) {
   const isBuilding = building.status === 'building'
+  const isOffline = building.status === 'offline'
 
   return (
     <tr className="border-t border-zinc-700 hover:bg-zinc-800/40">
@@ -185,12 +186,14 @@ function BuildingRow({
           <span className="text-amber-400">
             BUILDING — <CountdownCell completesAt={building.completesAt} /> remaining
           </span>
+        ) : isOffline ? (
+          <span className="text-red-400">OFFLINE — balance depleted</span>
         ) : (
           <span className="text-green-400">ACTIVE</span>
         )}
       </td>
       <td className="py-2 px-3 font-mono text-sm text-zinc-300">
-        {isBuilding ? (
+        {isBuilding || isOffline ? (
           <span className="text-zinc-500">—</span>
         ) : (
           `${formatUnits(building.outputUnits)} units`

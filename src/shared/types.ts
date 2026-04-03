@@ -5,7 +5,7 @@
 
 export type Market = 'consumer' | 'enterprise'
 
-export type BuildStatus = 'building' | 'active'
+export type BuildStatus = 'building' | 'active' | 'offline'
 export type RackStatus = 'delivering' | 'active' | 'offline'
 export type TrainingRunStatus = 'active' | 'idle'
 

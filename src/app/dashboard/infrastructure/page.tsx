@@ -54,6 +54,7 @@ function CountdownCell({ completesAt }: { completesAt: number }) {
 
 function FacilityRow({ facility }: { facility: FacilityDoc & { id: string } }) {
   const isBuilding = facility.status === 'building'
+  const isOffline = facility.status === 'offline'
   return (
     <tr className="border-t border-zinc-700 hover:bg-zinc-800/40">
       <td className="py-2 px-3 font-mono text-sm text-zinc-100">
@@ -64,6 +65,8 @@ function FacilityRow({ facility }: { facility: FacilityDoc & { id: string } }) {
           <span className="text-amber-400">
             Building… <CountdownCell completesAt={facility.completesAt} />
           </span>
+        ) : isOffline ? (
+          <span className="text-red-400">Offline — balance depleted</span>
         ) : (
           <span className="text-green-400">Active</span>
         )}

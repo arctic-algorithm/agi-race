@@ -328,8 +328,36 @@ export const gameTick = onSchedule('every 1 minutes', async () => {
         }
 
         // ─────────────────────────────────────────────────────────────────────
-        // STEP 1 — Complete builds
+        // STEP 1 — Complete builds + auto-recover offline assets
         // ─────────────────────────────────────────────────────────────────────
+
+        // Auto-recover offline facilities & energy buildings if player has money
+        if (workingMoney > 0) {
+          const offlineFacilitiesSnap = await db
+            .collection(`players/${playerId}/facilities`)
+            .where('status', '==', 'offline')
+            .get()
+          for (const fdoc of offlineFacilitiesSnap.docs) {
+            subUpdates.set(fdoc.ref, { data: { status: 'active' }, isNew: false })
+            // Bring racks in this facility back online too
+            const racksInFacilitySnap = await db
+              .collection(`players/${playerId}/racks`)
+              .where('facilityId', '==', fdoc.id)
+              .get()
+            for (const rdoc of racksInFacilitySnap.docs) {
+              if (rdoc.data().status === 'offline') {
+                subUpdates.set(rdoc.ref, { data: { status: 'active' }, isNew: false })
+              }
+            }
+          }
+          const offlineEnergySnap = await db
+            .collection(`players/${playerId}/energyBuildings`)
+            .where('status', '==', 'offline')
+            .get()
+          for (const edoc of offlineEnergySnap.docs) {
+            subUpdates.set(edoc.ref, { data: { status: 'active' }, isNew: false })
+          }
+        }
 
         // Facilities
         const facilitiesSnap = await db
@@ -532,7 +560,41 @@ export const gameTick = onSchedule('every 1 minutes', async () => {
 
         // Apply costs
         const moneyAfterRevenue = (playerUpdates['money'] as number)
-        playerUpdates['money'] = moneyAfterRevenue - totalCostsThisTick
+        const moneyAfterCosts = moneyAfterRevenue - totalCostsThisTick
+
+        if (moneyAfterCosts < 0) {
+          // Bankrupt — cap at 0 and take all maintained assets offline
+          playerUpdates['money'] = 0
+          playerUpdates['tokensPerSec'] = 0
+
+          const bkFacilitiesSnap = await db
+            .collection(`players/${playerId}/facilities`)
+            .where('status', '==', 'active')
+            .get()
+          for (const fdoc of bkFacilitiesSnap.docs) {
+            subUpdates.set(fdoc.ref, { data: { status: 'offline' }, isNew: false })
+            const racksSnap = await db
+              .collection(`players/${playerId}/racks`)
+              .where('facilityId', '==', fdoc.id)
+              .get()
+            for (const rdoc of racksSnap.docs) {
+              if (rdoc.data().status === 'active') {
+                subUpdates.set(rdoc.ref, { data: { status: 'offline' }, isNew: false })
+              }
+            }
+          }
+          const bkEnergySnap = await db
+            .collection(`players/${playerId}/energyBuildings`)
+            .where('status', '==', 'active')
+            .get()
+          for (const edoc of bkEnergySnap.docs) {
+            subUpdates.set(edoc.ref, { data: { status: 'offline' }, isNew: false })
+          }
+
+          logger.warn(`Player ${playerId} went bankrupt — assets taken offline`)
+        } else {
+          playerUpdates['money'] = moneyAfterCosts
+        }
 
         const monthlyCostsEstimate =
           (totalFacilityMaintenance + totalEnergyMaintenance) +
@@ -636,6 +698,21 @@ export const gameTick = onSchedule('every 1 minutes', async () => {
         // STEP 12 — Batch write all changes atomically
         // ─────────────────────────────────────────────────────────────────────
 
+        // Store per-day estimates + breakdown for dashboard display
+        playerUpdates['revenuePerDay'] = totalRevenueThisTick
+        playerUpdates['costsPerDay'] = totalCostsThisTick
+        playerUpdates['lastTickBreakdown'] = {
+          revenue: { total: totalRevenueThisTick, bySlot: revenueBySlot },
+          costs: {
+            total: totalCostsThisTick,
+            cloudRental: cloudRentalCostThisTick,
+            facilityMaintenance: facilityMaintenanceCostThisTick,
+            energyMaintenance: energyMaintenanceCostThisTick,
+            debtInterest: debtInterestCostThisTick,
+          },
+          profit: totalRevenueThisTick - totalCostsThisTick,
+        }
+
         // Firestore batches are capped at 500 operations; split if needed
         const MAX_BATCH_OPS = 499
 
@@ -664,21 +741,6 @@ export const gameTick = onSchedule('every 1 minutes', async () => {
             }
           }
           await batch.commit()
-        }
-
-        // Store per-day estimates + breakdown for dashboard display
-        playerUpdates['revenuePerDay'] = totalRevenueThisTick
-        playerUpdates['costsPerDay'] = totalCostsThisTick
-        playerUpdates['lastTickBreakdown'] = {
-          revenue: { total: totalRevenueThisTick, bySlot: revenueBySlot },
-          costs: {
-            total: totalCostsThisTick,
-            cloudRental: cloudRentalCostThisTick,
-            facilityMaintenance: facilityMaintenanceCostThisTick,
-            energyMaintenance: energyMaintenanceCostThisTick,
-            debtInterest: debtInterestCostThisTick,
-          },
-          profit: totalRevenueThisTick - totalCostsThisTick,
         }
 
         logger.info(`Tick complete for player ${playerId}`, {
