@@ -9,9 +9,11 @@ import {
   onSnapshot,
   addDoc,
 } from 'firebase/firestore'
+
+type ProductKey = string // market name used as product doc ID e.g. 'consumer' | 'enterprise'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
-import type { PlayerDoc, ProductDoc, TrainingRunDoc, ProductSlot } from '@/shared/types'
+import type { PlayerDoc, ProductDoc, TrainingRunDoc } from '@/shared/types'
 import { TRAINING_RUN_CONFIG, GLOBAL_CONFIG } from '@/shared/config'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -110,7 +112,7 @@ function ActiveRunPanel({
 
   const tokensPerDay = player.tokensPerSec * 86400 * (player.allocation.training / 100)
 
-  const slotLabel = run.targetSlot === 'slot1' ? 'Slot 1 (Consumer)' : 'Slot 2 (Enterprise)'
+  const slotLabel = run.targetSlot.charAt(0).toUpperCase() + run.targetSlot.slice(1)
 
   return (
     <div className="border border-zinc-700 rounded-sm p-4 bg-zinc-800/30 flex flex-col gap-3">
@@ -149,12 +151,12 @@ function ActiveRunPanel({
 // ─── Product Card ─────────────────────────────────────────────────────────────
 
 interface ProductCardProps {
-  slot: ProductSlot
+  slot: ProductKey
   product: ProductDoc | null
   completedRunsForSlot: number
   isActive: boolean
   noAllocation: boolean
-  onStart: (slot: ProductSlot) => void
+  onStart: (slot: ProductKey) => void
 }
 
 function ProductCard({
@@ -165,8 +167,8 @@ function ProductCard({
   noAllocation,
   onStart,
 }: ProductCardProps) {
-  const marketLabel = slot === 'slot1' ? 'Consumer' : 'Enterprise'
-  const slotLabel = slot === 'slot1' ? 'Slot 1' : 'Slot 2'
+  const marketLabel = slot.charAt(0).toUpperCase() + slot.slice(1)
+  const slotLabel = marketLabel
 
   const nextUplift = computeUplift(completedRunsForSlot)
   const nextDurationDays = computeNextDurationDays(completedRunsForSlot)
@@ -272,8 +274,9 @@ export default function TrainingPage() {
   const router = useRouter()
 
   const [player, setPlayer] = useState<PlayerDoc | null>(null)
-  const [products, setProducts] = useState<Map<ProductSlot, ProductDoc>>(new Map())
-  const [trainingRuns, setTrainingRuns] = useState<(TrainingRunDoc & { id: string })[]>([])
+  const [products, setProducts] = useState<Map<ProductKey, ProductDoc>>(new Map())
+  const [activeRun, setActiveRun] = useState<TrainingRunDoc | null>(null)
+  const [completedRuns, setCompletedRuns] = useState<(TrainingRunDoc & { id: string })[]>([])
   const [dataLoading, setDataLoading] = useState(true)
   const [toast, setToast] = useState<string | null>(null)
 
@@ -290,14 +293,16 @@ export default function TrainingPage() {
 
     const playerRef = doc(db, 'players', user.uid)
     const productsRef = collection(db, 'players', user.uid, 'products')
-    const runsRef = collection(db, 'players', user.uid, 'trainingRuns')
+    const activeRunRef = doc(db, 'players', user.uid, 'trainingRun', 'current')
+    const completedRunsRef = collection(db, 'players', user.uid, 'trainingRuns')
 
     let playerLoaded = false
     let productsLoaded = false
-    let runsLoaded = false
+    let runLoaded = false
+    let completedLoaded = false
 
     function checkAllLoaded() {
-      if (playerLoaded && productsLoaded && runsLoaded) {
+      if (playerLoaded && productsLoaded && runLoaded && completedLoaded) {
         setDataLoading(false)
       }
     }
@@ -313,27 +318,41 @@ export default function TrainingPage() {
     })
 
     const unsubProducts = onSnapshot(productsRef, (snap) => {
-      const map = new Map<ProductSlot, ProductDoc>()
+      const map = new Map<ProductKey, ProductDoc>()
       snap.docs.forEach((d) => {
-        map.set(d.id as ProductSlot, d.data() as ProductDoc)
+        map.set(d.id, d.data() as ProductDoc)
       })
       setProducts(map)
       productsLoaded = true
       checkAllLoaded()
     })
 
-    const unsubRuns = onSnapshot(runsRef, (snap) => {
-      setTrainingRuns(
-        snap.docs.map((d) => ({ id: d.id, ...(d.data() as TrainingRunDoc) }))
+    const unsubActiveRun = onSnapshot(activeRunRef, (snap) => {
+      if (snap.exists()) {
+        const run = snap.data() as TrainingRunDoc
+        setActiveRun(run.status === 'active' ? run : null)
+      } else {
+        setActiveRun(null)
+      }
+      runLoaded = true
+      checkAllLoaded()
+    })
+
+    const unsubCompleted = onSnapshot(completedRunsRef, (snap) => {
+      setCompletedRuns(
+        snap.docs
+          .map((d) => ({ id: d.id, ...(d.data() as TrainingRunDoc) }))
+          .sort((a, b) => b.completesAt - a.completesAt)
       )
-      runsLoaded = true
+      completedLoaded = true
       checkAllLoaded()
     })
 
     return () => {
       unsubPlayer()
       unsubProducts()
-      unsubRuns()
+      unsubActiveRun()
+      unsubCompleted()
     }
   }, [user, router])
 
@@ -346,7 +365,7 @@ export default function TrainingPage() {
 
   const showToast = useCallback((msg: string) => setToast(msg), [])
 
-  async function handleStartRun(targetSlot: ProductSlot) {
+  async function handleStartRun(targetSlot: ProductKey) {
     if (!user || !player) return
 
     showToast('Training run started — processing next tick')
@@ -361,14 +380,12 @@ export default function TrainingPage() {
 
   // ── Derived state ───────────────────────────────────────────────────────────
 
-  const activeRun = trainingRuns.find((r) => r.status === 'active') ?? null
-  const completedRuns = trainingRuns
-    .filter((r) => r.status === 'idle')
-    .sort((a, b) => b.completesAt - a.completesAt)
+  // Only show product slots that actually exist in Firestore
+  const ownedProductKeys = Array.from(products.keys())
 
   // Count completed runs per slot to determine uplift/duration for each
-  const completedRunsBySlot = (slot: ProductSlot) =>
-    trainingRuns.filter((r) => r.status === 'idle' && r.targetSlot === slot).length
+  const completedRunsBySlot = (slot: ProductKey) =>
+    completedRuns.filter((r) => r.targetSlot === slot).length
 
   const noAllocation = player ? player.allocation.training === 0 : false
   const tokensPerDay = player
@@ -489,22 +506,17 @@ export default function TrainingPage() {
         )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <ProductCard
-            slot="slot1"
-            product={products.get('slot1') ?? null}
-            completedRunsForSlot={completedRunsBySlot('slot1')}
-            isActive={activeRun !== null}
-            noAllocation={noAllocation}
-            onStart={handleStartRun}
-          />
-          <ProductCard
-            slot="slot2"
-            product={products.get('slot2') ?? null}
-            completedRunsForSlot={completedRunsBySlot('slot2')}
-            isActive={activeRun !== null}
-            noAllocation={noAllocation}
-            onStart={handleStartRun}
-          />
+          {ownedProductKeys.map((key) => (
+            <ProductCard
+              key={key}
+              slot={key}
+              product={products.get(key) ?? null}
+              completedRunsForSlot={completedRunsBySlot(key)}
+              isActive={activeRun !== null}
+              noAllocation={noAllocation}
+              onStart={handleStartRun}
+            />
+          ))}
         </div>
       </section>
 
@@ -537,8 +549,7 @@ export default function TrainingPage() {
               <tbody>
                 {completedRuns.map((run) => {
                   const product = products.get(run.targetSlot)
-                  const slotLabel =
-                    run.targetSlot === 'slot1' ? 'Slot 1 (Consumer)' : 'Slot 2 (Enterprise)'
+                  const slotLabel = run.targetSlot.charAt(0).toUpperCase() + run.targetSlot.slice(1)
                   return (
                     <tr
                       key={run.id}
