@@ -234,6 +234,9 @@ export const gameTick = onSchedule('every 1 minutes', async () => {
         // isNew=true uses batch.set(), isNew=false uses batch.update()
         const subUpdates: Map<admin.firestore.DocumentReference, { data: Record<string, unknown>; isNew: boolean }> = new Map()
 
+        // Docs to delete at the end of the tick
+        const deletions: Set<admin.firestore.DocumentReference> = new Set()
+
         // ─────────────────────────────────────────────────────────────────────
         // STEP 0 — Process pending actions
         // ─────────────────────────────────────────────────────────────────────
@@ -260,7 +263,7 @@ export const gameTick = onSchedule('every 1 minutes', async () => {
             const multiplier = Math.pow(BUILD_TIME_MULTIPLIERS.facility, existingSnap.size)
             const completesAt = now + cfg.buildTimeMinutes * 60 * 1000 * multiplier
             const facilityRef = db.collection(`players/${playerId}/facilities`).doc()
-            subUpdates.set(facilityRef, { data: { type: facilityType, status: 'building', completesAt, rackSlots: cfg.rackSlots, racksInstalled: 0, monthlyMaintenance: cfg.monthlyMaintenance }, isNew: true })
+            subUpdates.set(facilityRef, { data: { type: facilityType, status: 'building', completesAt, rackSlots: cfg.rackSlots, racksInstalled: 0, monthlyMaintenance: cfg.monthlyMaintenance, buildCost: cfg.buildCost }, isNew: true })
             workingMoney -= cfg.buildCost
 
           } else if (action.type === 'buy_rack') {
@@ -275,7 +278,7 @@ export const gameTick = onSchedule('every 1 minutes', async () => {
             const multiplier = Math.pow(BUILD_TIME_MULTIPLIERS.rack, existingSnap.size)
             const completesAt = now + cfg.deliveryTimeMinutes * 60 * 1000 * multiplier
             const rackRef = db.collection(`players/${playerId}/racks`).doc()
-            subUpdates.set(rackRef, { data: { type: rackType, status: 'delivering', completesAt, facilityId, tokensPerSec: cfg.tokensPerSec, energyDraw: cfg.energyDraw }, isNew: true })
+            subUpdates.set(rackRef, { data: { type: rackType, status: 'delivering', completesAt, facilityId, tokensPerSec: cfg.tokensPerSec, energyDraw: cfg.energyDraw, buildCost: cfg.buildCost }, isNew: true })
             const facilityRef = db.doc(`players/${playerId}/facilities/${facilityId}`)
             subUpdates.set(facilityRef, { data: { racksInstalled: admin.firestore.FieldValue.increment(1) }, isNew: false })
             workingMoney -= cfg.buildCost
@@ -291,8 +294,66 @@ export const gameTick = onSchedule('every 1 minutes', async () => {
             const multiplier = Math.pow(BUILD_TIME_MULTIPLIERS.energyBuilding, existingSnap.size)
             const completesAt = now + cfg.buildTimeMinutes * 60 * 1000 * multiplier
             const buildingRef = db.collection(`players/${playerId}/energyBuildings`).doc()
-            subUpdates.set(buildingRef, { data: { type: buildingType, status: 'building', completesAt, outputUnits: cfg.outputUnits, monthlyMaintenance: cfg.monthlyMaintenance }, isNew: true })
+            subUpdates.set(buildingRef, { data: { type: buildingType, status: 'building', completesAt, outputUnits: cfg.outputUnits, monthlyMaintenance: cfg.monthlyMaintenance, buildCost: cfg.buildCost }, isNew: true })
             workingMoney -= cfg.buildCost
+
+          } else if (action.type === 'pause_asset') {
+            const assetCollection = action.payload['assetCollection'] as string
+            const docId = action.payload['docId'] as string
+            const assetRef = db.doc(`players/${playerId}/${assetCollection}/${docId}`)
+            subUpdates.set(assetRef, { data: { status: 'offline' }, isNew: false })
+            if (assetCollection === 'facilities') {
+              const racksSnap = await db
+                .collection(`players/${playerId}/racks`)
+                .where('facilityId', '==', docId)
+                .get()
+              for (const rdoc of racksSnap.docs) {
+                subUpdates.set(rdoc.ref, { data: { status: 'offline' }, isNew: false })
+              }
+            }
+
+          } else if (action.type === 'unpause_asset') {
+            const assetCollection = action.payload['assetCollection'] as string
+            const docId = action.payload['docId'] as string
+            const assetRef = db.doc(`players/${playerId}/${assetCollection}/${docId}`)
+            subUpdates.set(assetRef, { data: { status: 'active' }, isNew: false })
+            if (assetCollection === 'facilities') {
+              const racksSnap = await db
+                .collection(`players/${playerId}/racks`)
+                .where('facilityId', '==', docId)
+                .where('status', '==', 'offline')
+                .get()
+              for (const rdoc of racksSnap.docs) {
+                subUpdates.set(rdoc.ref, { data: { status: 'active' }, isNew: false })
+              }
+            }
+
+          } else if (action.type === 'sell_asset') {
+            const assetCollection = action.payload['assetCollection'] as string
+            const docId = action.payload['docId'] as string
+            const assetRef = db.doc(`players/${playerId}/${assetCollection}/${docId}`)
+            const assetSnap = await assetRef.get()
+            if (assetSnap.exists) {
+              const assetData = assetSnap.data() as Record<string, unknown>
+              const buildCostValue = (assetData['buildCost'] as number) ?? 0
+              workingMoney += buildCostValue * 0.5
+              deletions.add(assetRef)
+              if (assetCollection === 'facilities') {
+                const racksSnap = await db
+                  .collection(`players/${playerId}/racks`)
+                  .where('facilityId', '==', docId)
+                  .get()
+                for (const rdoc of racksSnap.docs) {
+                  deletions.add(rdoc.ref)
+                }
+              } else if (assetCollection === 'racks') {
+                const facilityId = assetData['facilityId'] as string
+                if (facilityId) {
+                  const facilityRef = db.doc(`players/${playerId}/facilities/${facilityId}`)
+                  subUpdates.set(facilityRef, { data: { racksInstalled: admin.firestore.FieldValue.increment(-1) }, isNew: false })
+                }
+              }
+            }
 
           } else if (action.type === 'hire_talent') {
             const currentCount = (player.talentCount ?? 0) + talentCountDelta
@@ -719,6 +780,7 @@ export const gameTick = onSchedule('every 1 minutes', async () => {
         type BatchOp =
           | { kind: 'update'; ref: admin.firestore.DocumentReference; data: Record<string, unknown> }
           | { kind: 'set'; ref: admin.firestore.DocumentReference; data: Record<string, unknown> }
+          | { kind: 'delete'; ref: admin.firestore.DocumentReference }
 
         const allOps: BatchOp[] = [
           { kind: 'update', ref: db.doc(`players/${playerId}`), data: playerUpdates },
@@ -727,6 +789,7 @@ export const gameTick = onSchedule('every 1 minutes', async () => {
             ref,
             data: entry.data,
           })),
+          ...Array.from(deletions).map((ref) => ({ kind: 'delete' as const, ref })),
         ]
 
         // Chunk into batches of MAX_BATCH_OPS
@@ -736,6 +799,8 @@ export const gameTick = onSchedule('every 1 minutes', async () => {
           for (const op of chunk) {
             if (op.kind === 'set') {
               batch.set(op.ref, op.data)
+            } else if (op.kind === 'delete') {
+              batch.delete(op.ref)
             } else {
               batch.update(op.ref, op.data)
             }

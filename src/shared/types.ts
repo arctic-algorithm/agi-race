@@ -99,6 +99,7 @@ export interface FacilityDoc {
   /** Total rack slots in this facility */
   rackSlots: number
   racksInstalled: number
+  buildCost?: number
 }
 
 // ─── /players/{playerId}/racks/{rackId} ───────────────────────────────────────
@@ -111,6 +112,7 @@ export interface RackDoc {
   facilityId: string
   tokensPerSec: number
   energyDraw: number
+  buildCost?: number
 }
 
 // ─── /players/{playerId}/energyBuildings/{buildingId} ─────────────────────────
@@ -124,6 +126,7 @@ export interface EnergyBuildingDoc {
   outputUnits: number
   /** Monthly maintenance cost in $ */
   monthlyMaintenance: number
+  buildCost?: number
 }
 
 // ─── /players/{playerId}/products/{slot} ──────────────────────────────────────
@@ -197,6 +200,9 @@ export type ActionType =
   | 'take_on_debt'
   | 'launch_ipo'
   | 'launch_takeover_bid'
+  | 'pause_asset'
+  | 'unpause_asset'
+  | 'sell_asset'
 
 export interface ActionDoc {
   type: ActionType

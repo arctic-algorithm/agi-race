@@ -128,8 +128,18 @@ function EnergyOverviewBar({
 
 function OwnedBuildingsTable({
   buildings,
+  confirmSell,
+  onPause,
+  onUnpause,
+  onSell,
+  onConfirmSell,
 }: {
   buildings: (EnergyBuildingDoc & { id: string })[]
+  confirmSell: string | null
+  onPause: (assetCollection: string, id: string) => void
+  onUnpause: (assetCollection: string, id: string) => void
+  onSell: (assetCollection: string, id: string) => void
+  onConfirmSell: (id: string | null) => void
 }) {
   if (buildings.length === 0) {
     return (
@@ -156,11 +166,22 @@ function OwnedBuildingsTable({
             <th className="py-2 px-3 font-mono text-xs text-zinc-500 tracking-widest uppercase">
               Maintenance/mo
             </th>
+            <th className="py-2 px-3 font-mono text-xs text-zinc-500 tracking-widest uppercase">
+              Actions
+            </th>
           </tr>
         </thead>
         <tbody>
           {buildings.map((b) => (
-            <BuildingRow key={b.id} building={b} />
+            <BuildingRow
+              key={b.id}
+              building={b}
+              confirmSell={confirmSell}
+              onPause={onPause}
+              onUnpause={onUnpause}
+              onSell={onSell}
+              onConfirmSell={onConfirmSell}
+            />
           ))}
         </tbody>
       </table>
@@ -170,8 +191,18 @@ function OwnedBuildingsTable({
 
 function BuildingRow({
   building,
+  confirmSell,
+  onPause,
+  onUnpause,
+  onSell,
+  onConfirmSell,
 }: {
   building: EnergyBuildingDoc & { id: string }
+  confirmSell: string | null
+  onPause: (assetCollection: string, id: string) => void
+  onUnpause: (assetCollection: string, id: string) => void
+  onSell: (assetCollection: string, id: string) => void
+  onConfirmSell: (id: string | null) => void
 }) {
   const isBuilding = building.status === 'building'
   const isOffline = building.status === 'offline'
@@ -201,6 +232,33 @@ function BuildingRow({
       </td>
       <td className="py-2 px-3 font-mono text-sm text-zinc-300">
         {formatMoney(building.monthlyMaintenance)}/mo
+      </td>
+      <td className="py-2 px-3">
+        {!isBuilding && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => isOffline ? onUnpause('energyBuildings', building.id) : onPause('energyBuildings', building.id)}
+              className="font-mono text-xs px-2 py-1 border rounded-sm transition-colors border-zinc-600 text-zinc-400 hover:border-zinc-300 hover:text-zinc-100"
+            >
+              {isOffline ? 'Unpause' : 'Pause'}
+            </button>
+            {confirmSell === building.id ? (
+              <button
+                onClick={() => { onSell('energyBuildings', building.id); onConfirmSell(null) }}
+                className="font-mono text-xs px-2 py-1 border rounded-sm transition-colors border-red-700 text-red-400 hover:bg-red-900/40"
+              >
+                Confirm?
+              </button>
+            ) : (
+              <button
+                onClick={() => onConfirmSell(building.id)}
+                className="font-mono text-xs px-2 py-1 border rounded-sm transition-colors border-zinc-600 text-zinc-400 hover:border-red-600 hover:text-red-400"
+              >
+                Sell (50%)
+              </button>
+            )}
+          </div>
+        )}
       </td>
     </tr>
   )
@@ -350,6 +408,7 @@ export default function EnergyPage() {
   const [racks, setRacks] = useState<(RackDoc & { id: string })[]>([])
   const [dataLoading, setDataLoading] = useState(true)
   const [toast, setToast] = useState<string | null>(null)
+  const [confirmSellBuilding, setConfirmSellBuilding] = useState<string | null>(null)
 
   // Auth redirect
   useEffect(() => {
@@ -420,6 +479,37 @@ export default function EnergyPage() {
     setToast(msg)
   }, [])
 
+  async function handlePause(assetCollection: string, docId: string) {
+    if (!user) return
+    await addDoc(collection(db, 'players', user.uid, 'actions'), {
+      type: 'pause_asset',
+      payload: { assetCollection, docId },
+      createdAt: Date.now(),
+      processed: false,
+    })
+  }
+
+  async function handleUnpause(assetCollection: string, docId: string) {
+    if (!user) return
+    await addDoc(collection(db, 'players', user.uid, 'actions'), {
+      type: 'unpause_asset',
+      payload: { assetCollection, docId },
+      createdAt: Date.now(),
+      processed: false,
+    })
+  }
+
+  async function handleSell(assetCollection: string, docId: string) {
+    if (!user) return
+    showToast('Sell order placed — processing next tick')
+    await addDoc(collection(db, 'players', user.uid, 'actions'), {
+      type: 'sell_asset',
+      payload: { assetCollection, docId },
+      createdAt: Date.now(),
+      processed: false,
+    })
+  }
+
   async function handlePurchase(buildingType: EnergyBuildingType) {
     if (!user || !player) return
 
@@ -486,7 +576,14 @@ export default function EnergyPage() {
         <h2 className="font-mono text-sm font-bold text-zinc-100 tracking-widest uppercase mb-3">
           My Energy Infrastructure
         </h2>
-        <OwnedBuildingsTable buildings={energyBuildings} />
+        <OwnedBuildingsTable
+          buildings={energyBuildings}
+          confirmSell={confirmSellBuilding}
+          onPause={handlePause}
+          onUnpause={handleUnpause}
+          onSell={handleSell}
+          onConfirmSell={setConfirmSellBuilding}
+        />
       </section>
 
       {/* ── Section C: Purchase Energy Buildings ──────────────────────── */}

@@ -52,7 +52,21 @@ function CountdownCell({ completesAt }: { completesAt: number }) {
 
 // ─── Facility Row ─────────────────────────────────────────────────────────────
 
-function FacilityRow({ facility }: { facility: FacilityDoc & { id: string } }) {
+function FacilityRow({
+  facility,
+  confirmSell,
+  onPause,
+  onUnpause,
+  onSell,
+  onConfirmSell,
+}: {
+  facility: FacilityDoc & { id: string }
+  confirmSell: string | null
+  onPause: (id: string) => void
+  onUnpause: (id: string) => void
+  onSell: (collection: string, id: string) => void
+  onConfirmSell: (id: string | null) => void
+}) {
   const isBuilding = facility.status === 'building'
   const isOffline = facility.status === 'offline'
   return (
@@ -74,6 +88,33 @@ function FacilityRow({ facility }: { facility: FacilityDoc & { id: string } }) {
       <td className="py-2 px-3 font-mono text-sm text-zinc-300">
         {facility.racksInstalled} / {facility.rackSlots}
       </td>
+      <td className="py-2 px-3">
+        {!isBuilding && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => isOffline ? onUnpause(facility.id) : onPause(facility.id)}
+              className="font-mono text-xs px-2 py-1 border rounded-sm transition-colors border-zinc-600 text-zinc-400 hover:border-zinc-300 hover:text-zinc-100"
+            >
+              {isOffline ? 'Unpause' : 'Pause'}
+            </button>
+            {confirmSell === facility.id ? (
+              <button
+                onClick={() => { onSell('facilities', facility.id); onConfirmSell(null) }}
+                className="font-mono text-xs px-2 py-1 border rounded-sm transition-colors border-red-700 text-red-400 hover:bg-red-900/40"
+              >
+                Confirm?
+              </button>
+            ) : (
+              <button
+                onClick={() => onConfirmSell(facility.id)}
+                className="font-mono text-xs px-2 py-1 border rounded-sm transition-colors border-zinc-600 text-zinc-400 hover:border-red-600 hover:text-red-400"
+              >
+                Sell (50%)
+              </button>
+            )}
+          </div>
+        )}
+      </td>
     </tr>
   )
 }
@@ -83,9 +124,19 @@ function FacilityRow({ facility }: { facility: FacilityDoc & { id: string } }) {
 function RackRow({
   rack,
   facilityMap,
+  confirmSell,
+  onPause,
+  onUnpause,
+  onSell,
+  onConfirmSell,
 }: {
   rack: RackDoc & { id: string }
   facilityMap: Map<string, FacilityDoc>
+  confirmSell: string | null
+  onPause: (id: string) => void
+  onUnpause: (id: string) => void
+  onSell: (collection: string, id: string) => void
+  onConfirmSell: (id: string | null) => void
 }) {
   const isDelivering = rack.status === 'delivering'
   const isOffline = rack.status === 'offline'
@@ -118,6 +169,33 @@ function RackRow({
       </td>
       <td className="py-2 px-3 font-mono text-sm text-zinc-400">
         {facilityDoc ? formatLabel(facilityDoc.type) : rack.facilityId.slice(0, 8) + '…'}
+      </td>
+      <td className="py-2 px-3">
+        {!isDelivering && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => isOffline ? onUnpause(rack.id) : onPause(rack.id)}
+              className="font-mono text-xs px-2 py-1 border rounded-sm transition-colors border-zinc-600 text-zinc-400 hover:border-zinc-300 hover:text-zinc-100"
+            >
+              {isOffline ? 'Unpause' : 'Pause'}
+            </button>
+            {confirmSell === rack.id ? (
+              <button
+                onClick={() => { onSell('racks', rack.id); onConfirmSell(null) }}
+                className="font-mono text-xs px-2 py-1 border rounded-sm transition-colors border-red-700 text-red-400 hover:bg-red-900/40"
+              >
+                Confirm?
+              </button>
+            ) : (
+              <button
+                onClick={() => onConfirmSell(rack.id)}
+                className="font-mono text-xs px-2 py-1 border rounded-sm transition-colors border-zinc-600 text-zinc-400 hover:border-red-600 hover:text-red-400"
+              >
+                Sell (50%)
+              </button>
+            )}
+          </div>
+        )}
       </td>
     </tr>
   )
@@ -405,6 +483,8 @@ export default function InfrastructurePage() {
   const [showBuildFacility, setShowBuildFacility] = useState(false)
   const [showOrderRack, setShowOrderRack] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
+  const [confirmSellFacility, setConfirmSellFacility] = useState<string | null>(null)
+  const [confirmSellRack, setConfirmSellRack] = useState<string | null>(null)
 
   // Redirect if not logged in
   useEffect(() => {
@@ -506,6 +586,37 @@ export default function InfrastructurePage() {
     })
   }
 
+  async function handlePause(assetCollection: string, docId: string) {
+    if (!user) return
+    await addDoc(collection(db, 'players', user.uid, 'actions'), {
+      type: 'pause_asset',
+      payload: { assetCollection, docId },
+      createdAt: Date.now(),
+      processed: false,
+    })
+  }
+
+  async function handleUnpause(assetCollection: string, docId: string) {
+    if (!user) return
+    await addDoc(collection(db, 'players', user.uid, 'actions'), {
+      type: 'unpause_asset',
+      payload: { assetCollection, docId },
+      createdAt: Date.now(),
+      processed: false,
+    })
+  }
+
+  async function handleSell(assetCollection: string, docId: string) {
+    if (!user) return
+    showToast('Sell order placed — processing next tick')
+    await addDoc(collection(db, 'players', user.uid, 'actions'), {
+      type: 'sell_asset',
+      payload: { assetCollection, docId },
+      createdAt: Date.now(),
+      processed: false,
+    })
+  }
+
   // Build a map for fast facility lookup by id
   const facilityMap = new Map(facilities.map((f) => [f.id, f]))
 
@@ -598,11 +709,22 @@ export default function InfrastructurePage() {
                   <th className="py-2 px-3 font-mono text-xs text-zinc-500 tracking-widest uppercase">
                     Rack Slots
                   </th>
+                  <th className="py-2 px-3 font-mono text-xs text-zinc-500 tracking-widest uppercase">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {facilities.map((f) => (
-                  <FacilityRow key={f.id} facility={f} />
+                  <FacilityRow
+                    key={f.id}
+                    facility={f}
+                    confirmSell={confirmSellFacility}
+                    onPause={(id) => handlePause('facilities', id)}
+                    onUnpause={(id) => handleUnpause('facilities', id)}
+                    onSell={handleSell}
+                    onConfirmSell={setConfirmSellFacility}
+                  />
                 ))}
               </tbody>
             </table>
@@ -658,11 +780,23 @@ export default function InfrastructurePage() {
                   <th className="py-2 px-3 font-mono text-xs text-zinc-500 tracking-widest uppercase">
                     Facility
                   </th>
+                  <th className="py-2 px-3 font-mono text-xs text-zinc-500 tracking-widest uppercase">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {racks.map((r) => (
-                  <RackRow key={r.id} rack={r} facilityMap={facilityMap} />
+                  <RackRow
+                    key={r.id}
+                    rack={r}
+                    facilityMap={facilityMap}
+                    confirmSell={confirmSellRack}
+                    onPause={(id) => handlePause('racks', id)}
+                    onUnpause={(id) => handleUnpause('racks', id)}
+                    onSell={handleSell}
+                    onConfirmSell={setConfirmSellRack}
+                  />
                 ))}
               </tbody>
             </table>
