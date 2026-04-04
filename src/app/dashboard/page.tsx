@@ -246,7 +246,7 @@ export default function DashboardPage() {
       <div className="mt-auto border-t border-zinc-800 pt-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <p className="font-mono text-xs text-zinc-600 tracking-wider">
-            LIVE &nbsp;·&nbsp; v0.11
+            LIVE &nbsp;·&nbsp; v0.12
           </p>
           {gameDate && (
             <p className="font-mono text-xs tracking-wider">
@@ -257,7 +257,7 @@ export default function DashboardPage() {
         </div>
         <div className="flex items-center gap-4">
           <p className="font-mono text-xs tracking-wider">
-            <span className="text-zinc-600">NEXT TICK </span>
+            <span className="text-zinc-600">NEXT DAY </span>
             <span className={tickCountdown <= 5 ? 'text-green-400 animate-pulse' : 'text-zinc-400'}>
               {tickCountdown}s
             </span>
