@@ -179,6 +179,12 @@ export default function DashboardPage() {
                 <span className="text-red-400">−{formatMoney(Math.round(player.lastTickBreakdown.costs.cloudRental))}</span>
               </div>
             )}
+            {(player.lastTickBreakdown.costs.publicGrid ?? 0) > 0 && (
+              <div className="flex justify-between pl-2">
+                <span className="text-zinc-400">Public Grid</span>
+                <span className="text-red-400">−{formatMoney(Math.round(player.lastTickBreakdown.costs.publicGrid ?? 0))}</span>
+              </div>
+            )}
             {player.lastTickBreakdown.costs.facilityMaintenance > 0 && (
               <div className="flex justify-between pl-2">
                 <span className="text-zinc-400">Facility Maintenance</span>
@@ -216,7 +222,7 @@ export default function DashboardPage() {
       <div className="mt-auto border-t border-zinc-800 pt-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <p className="font-mono text-xs text-zinc-600 tracking-wider">
-            LIVE &nbsp;·&nbsp; v0.9
+            LIVE &nbsp;·&nbsp; v0.10
           </p>
           {gameDate && (
             <p className="font-mono text-xs tracking-wider">

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   collection,
@@ -18,7 +18,7 @@ import {
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
 import type { PlayerDoc, FacilityDoc, RackDoc, FacilityType, RackType } from '@/shared/types'
-import { FACILITY_CONFIG, RACK_CONFIG, CLOUD_CONFIG } from '@/shared/config'
+import { FACILITY_CONFIG, RACK_CONFIG, CLOUD_CONFIG, GRID_CONFIG } from '@/shared/config'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -497,6 +497,8 @@ export default function InfrastructurePage() {
   const [toast, setToast] = useState<string | null>(null)
   const [confirmSellFacility, setConfirmSellFacility] = useState<string | null>(null)
   const [confirmSellRack, setConfirmSellRack] = useState<string | null>(null)
+  const [cloudSlider, setCloudSlider] = useState<number>(0)
+  const cloudSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Redirect if not logged in
   useEffect(() => {
@@ -562,6 +564,24 @@ export default function InfrastructurePage() {
     const id = setTimeout(() => setToast(null), 4000)
     return () => clearTimeout(id)
   }, [toast])
+
+  // Sync cloud slider from Firestore on first player load (not on every snapshot)
+  const cloudSliderInitialized = useRef(false)
+  useEffect(() => {
+    if (player && !cloudSliderInitialized.current) {
+      cloudSliderInitialized.current = true
+      setCloudSlider(player.cloudRentalTps ?? 0)
+    }
+  }, [player])
+
+  function handleCloudSliderChange(val: number) {
+    setCloudSlider(val)
+    if (cloudSaveTimer.current) clearTimeout(cloudSaveTimer.current)
+    cloudSaveTimer.current = setTimeout(() => {
+      if (!user) return
+      updateDoc(doc(db, 'players', user.uid), { cloudRentalTps: val })
+    }, 600)
+  }
 
   const showToast = useCallback((msg: string) => {
     setToast(msg)
@@ -691,23 +711,38 @@ export default function InfrastructurePage() {
         <span className="text-green-400 font-bold">{formatMoney(player.money)}</span>
       </div>
 
-      {/* ── Cloud Rental Banner ──────────────────────────────────────── */}
-      {racks.filter(r => r.status === 'active').length === 0 && (() => {
-        const tps = player.cloudRentalTps ?? 5_000
-        const costPerDay = (tps * CLOUD_CONFIG.baseCostPerTps) / 30
+      {/* ── Cloud Rental Slider ───────────────────────────────────────── */}
+      {(() => {
+        const costPerDay = (cloudSlider * CLOUD_CONFIG.baseCostPerTps) / 30
         return (
-          <div className="border border-amber-700/60 bg-amber-900/10 rounded-sm px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <p className="font-mono text-xs font-bold text-amber-400 tracking-widest uppercase mb-1">
-                Cloud Rental Active
+          <div className="border border-zinc-700 bg-zinc-800/30 rounded-sm px-4 py-3">
+            <div className="flex items-center justify-between mb-2">
+              <p className="font-mono text-xs font-bold text-zinc-300 tracking-widest uppercase">
+                Cloud Token Rental
               </p>
               <p className="font-mono text-xs text-zinc-400">
-                {tps.toLocaleString('en-US')} t/s &nbsp;·&nbsp; {formatMoney(Math.round(costPerDay))}/day
-              </p>
-              <p className="font-mono text-xs text-zinc-600 mt-0.5">
-                Automatically replaced when your own racks come online.
+                {cloudSlider.toLocaleString('en-US')} t/s
+                {cloudSlider > 0 && (
+                  <span className="text-red-400 ml-2">· {formatMoney(Math.round(costPerDay))}/day</span>
+                )}
               </p>
             </div>
+            <input
+              type="range"
+              min={0}
+              max={GRID_CONFIG.maxCloudRentalTps}
+              step={500}
+              value={cloudSlider}
+              onChange={(e) => handleCloudSliderChange(Number(e.target.value))}
+              className="w-full accent-green-500"
+            />
+            <div className="flex justify-between mt-1">
+              <span className="font-mono text-[10px] text-zinc-600">0</span>
+              <span className="font-mono text-[10px] text-zinc-600">{GRID_CONFIG.maxCloudRentalTps.toLocaleString('en-US')} t/s max</span>
+            </div>
+            {cloudSlider === 0 && (
+              <p className="font-mono text-xs text-zinc-600 mt-1">Drag to rent cloud compute tokens.</p>
+            )}
           </div>
         )
       })()}

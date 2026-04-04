@@ -21,6 +21,10 @@ const DEFAULT_CLOUD_CONFIG = {
   scalingFactor: 0.0001,
 }
 
+const DEFAULT_GRID_CONFIG = {
+  publicGridCostPerUnitPerMonth: 100,
+}
+
 const DEFAULT_TALENT_CONFIG = {
   tokenReductionPerTalent: 0.02,
   maxTokenReduction: 0.5,
@@ -119,6 +123,7 @@ interface PlayerDoc {
   // Optional fields set by tick or onboarding
   lastTickAt?: number
   cloudRentalTps?: number
+  publicGridUnits?: number
   publicContractUnits?: number
   ipoEligible?: boolean
   unlockedMilestones?: string[]
@@ -185,6 +190,7 @@ export const gameTick = onSchedule('every 1 minutes', async () => {
   // ── Load config from Firestore, fall back to defaults ──
   let GLOBAL_CONFIG = DEFAULT_GLOBAL_CONFIG
   let CLOUD_CONFIG = DEFAULT_CLOUD_CONFIG
+  let GRID_CONFIG = DEFAULT_GRID_CONFIG
   let TALENT_CONFIG = DEFAULT_TALENT_CONFIG
   let DEBT_CONFIG = DEFAULT_DEBT_CONFIG
   let TRAINING_RUN_CONFIG = DEFAULT_TRAINING_RUN_CONFIG
@@ -197,6 +203,7 @@ export const gameTick = onSchedule('every 1 minutes', async () => {
       const cfg = cfgSnap.data() as Record<string, unknown>
       if (cfg.GLOBAL_CONFIG) GLOBAL_CONFIG = { ...DEFAULT_GLOBAL_CONFIG, ...(cfg.GLOBAL_CONFIG as typeof DEFAULT_GLOBAL_CONFIG) }
       if (cfg.CLOUD_CONFIG) CLOUD_CONFIG = { ...DEFAULT_CLOUD_CONFIG, ...(cfg.CLOUD_CONFIG as typeof DEFAULT_CLOUD_CONFIG) }
+      if (cfg.GRID_CONFIG) GRID_CONFIG = { ...DEFAULT_GRID_CONFIG, ...(cfg.GRID_CONFIG as typeof DEFAULT_GRID_CONFIG) }
       if (cfg.TALENT_CONFIG) TALENT_CONFIG = { ...DEFAULT_TALENT_CONFIG, ...(cfg.TALENT_CONFIG as typeof DEFAULT_TALENT_CONFIG) }
       if (cfg.DEBT_CONFIG) DEBT_CONFIG = { ...DEFAULT_DEBT_CONFIG, ...(cfg.DEBT_CONFIG as typeof DEFAULT_DEBT_CONFIG) }
       if (cfg.TRAINING_RUN_CONFIG) TRAINING_RUN_CONFIG = { ...DEFAULT_TRAINING_RUN_CONFIG, ...(cfg.TRAINING_RUN_CONFIG as typeof DEFAULT_TRAINING_RUN_CONFIG) }
@@ -502,12 +509,8 @@ export const gameTick = onSchedule('every 1 minutes', async () => {
         // Include newly completing racks
         rawTps += newRackTps
 
-        const hasOwnedRacks = rawTps > 0
-        const cloudRentalTps = player.cloudRentalTps ?? 5_000
-
-        if (!hasOwnedRacks) {
-          rawTps = cloudRentalTps
-        }
+        const cloudRentalTps = player.cloudRentalTps ?? 0
+        rawTps += cloudRentalTps
 
         // Apply talent efficiency bonus
         const talentCount = player.talentCount ?? 0
@@ -585,15 +588,24 @@ export const gameTick = onSchedule('every 1 minutes', async () => {
         const daysPerMonth = GLOBAL_CONFIG.daysPerMonth
         let totalCostsThisTick = 0
         let cloudRentalCostThisTick = 0
+        let publicGridCostThisTick = 0
         let facilityMaintenanceCostThisTick = 0
         let energyMaintenanceCostThisTick = 0
         let debtInterestCostThisTick = 0
 
-        // Cloud rental cost (only when using cloud rental, i.e. no owned racks)
-        if (!hasOwnedRacks) {
+        // Cloud rental cost (always charged based on user's slider value)
+        if (cloudRentalTps > 0) {
           const cloudCostPerMonth = cloudRentalTps * CLOUD_CONFIG.baseCostPerTps
           cloudRentalCostThisTick = cloudCostPerMonth / daysPerMonth
           totalCostsThisTick += cloudRentalCostThisTick
+        }
+
+        // Public grid energy cost
+        const publicGridUnits = player.publicGridUnits ?? 0
+        if (publicGridUnits > 0) {
+          const gridCostPerMonth = publicGridUnits * GRID_CONFIG.publicGridCostPerUnitPerMonth
+          publicGridCostThisTick = gridCostPerMonth / daysPerMonth
+          totalCostsThisTick += publicGridCostThisTick
         }
 
         // Facility maintenance
@@ -659,7 +671,8 @@ export const gameTick = onSchedule('every 1 minutes', async () => {
 
         const monthlyCostsEstimate =
           (totalFacilityMaintenance + totalEnergyMaintenance) +
-          (hasOwnedRacks ? 0 : cloudRentalTps * CLOUD_CONFIG.baseCostPerTps) +
+          cloudRentalTps * CLOUD_CONFIG.baseCostPerTps +
+          publicGridUnits * GRID_CONFIG.publicGridCostPerUnitPerMonth +
           debt * DEBT_CONFIG.monthlyInterestRate
 
         // ─────────────────────────────────────────────────────────────────────
@@ -767,6 +780,7 @@ export const gameTick = onSchedule('every 1 minutes', async () => {
           costs: {
             total: totalCostsThisTick,
             cloudRental: cloudRentalCostThisTick,
+            publicGrid: publicGridCostThisTick,
             facilityMaintenance: facilityMaintenanceCostThisTick,
             energyMaintenance: energyMaintenanceCostThisTick,
             debtInterest: debtInterestCostThisTick,

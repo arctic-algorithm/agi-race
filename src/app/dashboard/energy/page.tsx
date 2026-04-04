@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   collection,
@@ -20,7 +20,7 @@ import type {
   RackDoc,
   EnergyBuildingType,
 } from '@/shared/types'
-import { ENERGY_BUILDING_CONFIG, BUILD_TIME_MULTIPLIERS } from '@/shared/config'
+import { ENERGY_BUILDING_CONFIG, BUILD_TIME_MULTIPLIERS, GRID_CONFIG } from '@/shared/config'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -415,6 +415,9 @@ export default function EnergyPage() {
   const [dataLoading, setDataLoading] = useState(true)
   const [toast, setToast] = useState<string | null>(null)
   const [confirmSellBuilding, setConfirmSellBuilding] = useState<string | null>(null)
+  const [gridSlider, setGridSlider] = useState<number>(0)
+  const gridSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const gridSliderInitialized = useRef(false)
 
   // Auth redirect
   useEffect(() => {
@@ -480,6 +483,23 @@ export default function EnergyPage() {
     const id = setTimeout(() => setToast(null), 4000)
     return () => clearTimeout(id)
   }, [toast])
+
+  // Sync grid slider from Firestore on first player load
+  useEffect(() => {
+    if (player && !gridSliderInitialized.current) {
+      gridSliderInitialized.current = true
+      setGridSlider(player.publicGridUnits ?? 0)
+    }
+  }, [player])
+
+  function handleGridSliderChange(val: number) {
+    setGridSlider(val)
+    if (gridSaveTimer.current) clearTimeout(gridSaveTimer.current)
+    gridSaveTimer.current = setTimeout(() => {
+      if (!user) return
+      updateDoc(doc(db, 'players', user.uid), { publicGridUnits: val })
+    }, 600)
+  }
 
   const showToast = useCallback((msg: string) => {
     setToast(msg)
@@ -560,20 +580,41 @@ export default function EnergyPage() {
         <EnergyOverviewBar energyBuildings={energyBuildings} racks={racks} />
       </section>
 
-      {/* ── Public Grid Banner ───────────────────────────────────────── */}
-      {energyBuildings.filter(b => b.status === 'active').length === 0 && (
-        <div className="border border-amber-700/60 bg-amber-900/10 rounded-sm px-4 py-3">
-          <p className="font-mono text-xs font-bold text-amber-400 tracking-widest uppercase mb-1">
-            Public Grid Active
-          </p>
-          <p className="font-mono text-xs text-zinc-400">
-            Your racks are drawing from the public energy grid at no current charge.
-          </p>
-          <p className="font-mono text-xs text-zinc-600 mt-0.5">
-            Build your own energy infrastructure to lock in stable costs as you scale.
-          </p>
-        </div>
-      )}
+      {/* ── Public Grid Slider ───────────────────────────────────────── */}
+      {(() => {
+        const costPerDay = (gridSlider * GRID_CONFIG.publicGridCostPerUnitPerMonth) / 30
+        return (
+          <div className="border border-zinc-700 bg-zinc-800/30 rounded-sm px-4 py-3">
+            <div className="flex items-center justify-between mb-2">
+              <p className="font-mono text-xs font-bold text-zinc-300 tracking-widest uppercase">
+                Public Grid Energy
+              </p>
+              <p className="font-mono text-xs text-zinc-400">
+                {gridSlider.toLocaleString('en-US')} units
+                {gridSlider > 0 && (
+                  <span className="text-red-400 ml-2">· {formatMoney(Math.round(costPerDay))}/day</span>
+                )}
+              </p>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={GRID_CONFIG.maxPublicGridUnits}
+              step={250}
+              value={gridSlider}
+              onChange={(e) => handleGridSliderChange(Number(e.target.value))}
+              className="w-full accent-green-500"
+            />
+            <div className="flex justify-between mt-1">
+              <span className="font-mono text-[10px] text-zinc-600">0</span>
+              <span className="font-mono text-[10px] text-zinc-600">{GRID_CONFIG.maxPublicGridUnits.toLocaleString('en-US')} units max</span>
+            </div>
+            {gridSlider === 0 && (
+              <p className="font-mono text-xs text-zinc-600 mt-1">Drag to draw energy from the public grid.</p>
+            )}
+          </div>
+        )
+      })()}
 
       {/* ── Section B: Owned Energy Buildings ─────────────────────────── */}
       <section>

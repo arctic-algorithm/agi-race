@@ -69,8 +69,10 @@ export interface PlayerDoc {
   stockPrice: number
   debt: number
   createdAt: number // Unix ms timestamp
-  /** Tokens/sec rented from cloud — defaults to 5000, active when player has no owned racks */
+  /** Tokens/sec rented from cloud — user-controlled slider (0 to GRID_CONFIG.maxCloudRentalTps) */
   cloudRentalTps?: number
+  /** Energy units drawn from the public grid — user-controlled slider (0 to GRID_CONFIG.maxPublicGridUnits) */
+  publicGridUnits?: number
   // Set by tick — used for dashboard display
   revenuePerDay?: number
   costsPerDay?: number
@@ -83,6 +85,7 @@ export interface PlayerDoc {
     costs: {
       total: number
       cloudRental: number
+      publicGrid: number
       facilityMaintenance: number
       energyMaintenance: number
       debtInterest: number

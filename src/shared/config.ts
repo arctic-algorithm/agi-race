@@ -30,6 +30,17 @@ export const CLOUD_CONFIG = {
   scalingFactor: 0.0001,
 } as const
 
+// ─── Public Grid & Cloud Slider Limits ────────────────────────────────────────
+
+export const GRID_CONFIG = {
+  /** Maximum cloud tokens/sec a player can rent */
+  maxCloudRentalTps: 20_000,
+  /** Maximum public grid energy units a player can draw */
+  maxPublicGridUnits: 10_000,
+  /** Cost per energy unit per game month */
+  publicGridCostPerUnitPerMonth: 100,
+} as const
+
 // ─── Products & Revenue ───────────────────────────────────────────────────────
 
 export const PRODUCT_CONFIG: Record<Market, {
