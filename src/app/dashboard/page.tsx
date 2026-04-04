@@ -28,31 +28,46 @@ function useTickCountdown(lastTickAt: number | undefined): number {
   return seconds
 }
 
-function useInterpolatedStats(player: PlayerDoc | null): { money: number; researchScore: number } {
-  const [stats, setStats] = useState({ money: 0, researchScore: 0 })
+function useInterpolatedResearch(player: PlayerDoc | null): number {
+  const [researchScore, setResearchScore] = useState(0)
 
   useEffect(() => {
     if (!player) return
-    setStats({ money: player.money, researchScore: player.researchScore })
+    setResearchScore(player.researchScore)
 
-    const profitPerDay = (player.revenuePerDay ?? 0) - (player.costsPerDay ?? 0)
     const researchPerDay = player.tokensPerSec * (player.allocation.research / 100) * 60
-
-    if (profitPerDay === 0 && researchPerDay === 0) return
+    if (researchPerDay === 0) return
 
     const id = setInterval(() => {
       if (!player.lastTickAt) return
       const elapsedDays = (Date.now() - player.lastTickAt) / (60 * 1000)
-      setStats({
-        money: player.money + profitPerDay * elapsedDays,
-        researchScore: player.researchScore + researchPerDay * elapsedDays,
-      })
+      setResearchScore(player.researchScore + researchPerDay * elapsedDays)
     }, 1000)
 
     return () => clearInterval(id)
   }, [player])
 
-  return stats
+  return researchScore
+}
+
+const GAME_EPOCH = new Date('2010-09-23').getTime()
+
+function useGameDate(createdAt: number, lastTickAt: number | undefined): string {
+  const [gameDate, setGameDate] = useState('')
+
+  useEffect(() => {
+    const compute = () => {
+      const ref = lastTickAt ?? createdAt
+      const daysElapsed = Math.floor((ref - createdAt) / (60 * 1000))
+      const d = new Date(GAME_EPOCH + daysElapsed * 86_400_000)
+      setGameDate(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }))
+    }
+    compute()
+    const id = setInterval(compute, 5000)
+    return () => clearInterval(id)
+  }, [createdAt, lastTickAt])
+
+  return gameDate
 }
 
 export default function DashboardPage() {
@@ -85,7 +100,8 @@ export default function DashboardPage() {
   }, [user, router])
 
   const tickCountdown = useTickCountdown(player?.lastTickAt)
-  const interpolated = useInterpolatedStats(player)
+  const interpolatedResearch = useInterpolatedResearch(player)
+  const gameDate = useGameDate(player?.createdAt ?? Date.now(), player?.lastTickAt)
 
   async function handleSignOut() {
     await signOut(auth)
@@ -129,7 +145,7 @@ export default function DashboardPage() {
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <StatCard label="Company" value={player.companyName} />
-        <StatCard label="Balance" value={formatMoney(Math.round(interpolated.money))} highlight />
+        <StatCard label="Balance" value={formatMoney(Math.round(player.money))} highlight />
         <StatCard
           label="Market"
           value={player.market === 'consumer' ? 'Consumer' : 'Enterprise'}
@@ -140,7 +156,7 @@ export default function DashboardPage() {
         />
         <StatCard
           label="Research Score"
-          value={Math.round(interpolated.researchScore).toLocaleString('en-US')}
+          value={Math.round(interpolatedResearch).toLocaleString('en-US')}
         />
         <StatCard
           label="Token Allocation"
@@ -285,9 +301,17 @@ export default function DashboardPage() {
 
       {/* Status footer */}
       <div className="mt-auto border-t border-zinc-800 pt-4 flex items-center justify-between">
-        <p className="font-mono text-xs text-zinc-600 tracking-wider">
-          LIVE — Real-time Firestore listener active &nbsp;·&nbsp; v0.6
-        </p>
+        <div className="flex items-center gap-4">
+          <p className="font-mono text-xs text-zinc-600 tracking-wider">
+            LIVE &nbsp;·&nbsp; v0.7
+          </p>
+          {gameDate && (
+            <p className="font-mono text-xs tracking-wider">
+              <span className="text-zinc-600">DATE </span>
+              <span className="text-zinc-400">{gameDate}</span>
+            </p>
+          )}
+        </div>
         <p className="font-mono text-xs tracking-wider">
           <span className="text-zinc-600">NEXT TICK </span>
           <span className={tickCountdown <= 5 ? 'text-green-400 animate-pulse' : 'text-zinc-400'}>
