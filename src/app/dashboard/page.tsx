@@ -216,7 +216,7 @@ export default function DashboardPage() {
       <div className="mt-auto border-t border-zinc-800 pt-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <p className="font-mono text-xs text-zinc-600 tracking-wider">
-            LIVE &nbsp;·&nbsp; v0.8
+            LIVE &nbsp;·&nbsp; v0.9
           </p>
           {gameDate && (
             <p className="font-mono text-xs tracking-wider">

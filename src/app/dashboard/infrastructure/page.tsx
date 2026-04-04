@@ -18,7 +18,7 @@ import {
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
 import type { PlayerDoc, FacilityDoc, RackDoc, FacilityType, RackType } from '@/shared/types'
-import { FACILITY_CONFIG, RACK_CONFIG } from '@/shared/config'
+import { FACILITY_CONFIG, RACK_CONFIG, CLOUD_CONFIG } from '@/shared/config'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -690,6 +690,27 @@ export default function InfrastructurePage() {
         Balance:{' '}
         <span className="text-green-400 font-bold">{formatMoney(player.money)}</span>
       </div>
+
+      {/* ── Cloud Rental Banner ──────────────────────────────────────── */}
+      {racks.filter(r => r.status === 'active').length === 0 && (() => {
+        const tps = player.cloudRentalTps ?? 5_000
+        const costPerDay = (tps * CLOUD_CONFIG.baseCostPerTps) / 30
+        return (
+          <div className="border border-amber-700/60 bg-amber-900/10 rounded-sm px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <p className="font-mono text-xs font-bold text-amber-400 tracking-widest uppercase mb-1">
+                Cloud Rental Active
+              </p>
+              <p className="font-mono text-xs text-zinc-400">
+                {tps.toLocaleString('en-US')} t/s &nbsp;·&nbsp; {formatMoney(Math.round(costPerDay))}/day
+              </p>
+              <p className="font-mono text-xs text-zinc-600 mt-0.5">
+                Automatically replaced when your own racks come online.
+              </p>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ── Section A: Facilities ─────────────────────────────────────── */}
       <section>

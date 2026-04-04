@@ -560,6 +560,21 @@ export default function EnergyPage() {
         <EnergyOverviewBar energyBuildings={energyBuildings} racks={racks} />
       </section>
 
+      {/* ── Public Grid Banner ───────────────────────────────────────── */}
+      {energyBuildings.filter(b => b.status === 'active').length === 0 && (
+        <div className="border border-amber-700/60 bg-amber-900/10 rounded-sm px-4 py-3">
+          <p className="font-mono text-xs font-bold text-amber-400 tracking-widest uppercase mb-1">
+            Public Grid Active
+          </p>
+          <p className="font-mono text-xs text-zinc-400">
+            Your racks are drawing from the public energy grid at no current charge.
+          </p>
+          <p className="font-mono text-xs text-zinc-600 mt-0.5">
+            Build your own energy infrastructure to lock in stable costs as you scale.
+          </p>
+        </div>
+      )}
+
       {/* ── Section B: Owned Energy Buildings ─────────────────────────── */}
       <section>
         <h2 className="font-mono text-sm font-bold text-zinc-100 tracking-widest uppercase mb-3">

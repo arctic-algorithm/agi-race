@@ -69,6 +69,8 @@ export interface PlayerDoc {
   stockPrice: number
   debt: number
   createdAt: number // Unix ms timestamp
+  /** Tokens/sec rented from cloud — defaults to 5000, active when player has no owned racks */
+  cloudRentalTps?: number
   // Set by tick — used for dashboard display
   revenuePerDay?: number
   costsPerDay?: number
