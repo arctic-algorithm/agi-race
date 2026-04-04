@@ -2,10 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { doc, onSnapshot } from 'firebase/firestore'
-import { signOut } from 'firebase/auth'
-import { db, auth } from '@/lib/firebase'
+import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
 import type { PlayerDoc } from '@/shared/types'
 
@@ -103,11 +101,6 @@ export default function DashboardPage() {
   const interpolatedResearch = useInterpolatedResearch(player)
   const gameDate = useGameDate(player?.createdAt ?? Date.now(), player?.lastTickAt)
 
-  async function handleSignOut() {
-    await signOut(auth)
-    router.replace('/')
-  }
-
   if (loading || playerLoading) {
     return (
       <div className="flex flex-1 items-center justify-center">
@@ -121,26 +114,9 @@ export default function DashboardPage() {
   return (
     <div className="flex flex-1 flex-col p-6 gap-6 max-w-4xl mx-auto w-full">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-zinc-700 pb-4">
-        <div>
-          <h1 className="font-mono text-xl font-bold text-green-400 tracking-widest">
-            {player.companyName.toUpperCase()}
-          </h1>
-          <p className="font-mono text-xs text-zinc-500 mt-0.5 tracking-wider">
-            AGI RACE — DASHBOARD
-          </p>
-        </div>
-        <button
-          onClick={handleSignOut}
-          className="
-            font-mono text-xs px-4 py-2 border border-zinc-600 rounded-sm
-            text-zinc-400 hover:border-red-500 hover:text-red-400
-            transition-colors duration-150
-          "
-        >
-          Sign Out
-        </button>
-      </div>
+      <h1 className="font-mono text-sm font-bold text-zinc-100 tracking-widest uppercase border-b border-zinc-700 pb-4">
+        Overview
+      </h1>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -178,69 +154,6 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* Navigation */}
-      <div className="flex flex-wrap gap-3">
-        <Link
-          href="/dashboard/infrastructure"
-          className="
-            font-mono text-xs px-4 py-2 border border-zinc-600 rounded-sm
-            text-zinc-300 hover:border-green-500 hover:text-green-400
-            transition-colors duration-150
-          "
-        >
-          Infrastructure →
-        </Link>
-        <Link
-          href="/dashboard/energy"
-          className="
-            font-mono text-xs px-4 py-2 border border-zinc-600 rounded-sm
-            text-zinc-300 hover:border-green-500 hover:text-green-400
-            transition-colors duration-150
-          "
-        >
-          Energy →
-        </Link>
-        <Link
-          href="/dashboard/allocation"
-          className="
-            font-mono text-xs px-4 py-2 border border-zinc-600 rounded-sm
-            text-zinc-300 hover:border-green-500 hover:text-green-400
-            transition-colors duration-150
-          "
-        >
-          Allocation →
-        </Link>
-        <Link
-          href="/dashboard/leaderboard"
-          className="
-            font-mono text-xs px-4 py-2 border border-zinc-600 rounded-sm
-            text-zinc-300 hover:border-green-500 hover:text-green-400
-            transition-colors duration-150
-          "
-        >
-          Leaderboard →
-        </Link>
-        <Link
-          href="/dashboard/training"
-          className="
-            font-mono text-xs px-4 py-2 border border-zinc-600 rounded-sm
-            text-zinc-300 hover:border-green-500 hover:text-green-400
-            transition-colors duration-150
-          "
-        >
-          Training →
-        </Link>
-        <Link
-          href="/dashboard/talent"
-          className="
-            font-mono text-xs px-4 py-2 border border-zinc-600 rounded-sm
-            text-zinc-300 hover:border-green-500 hover:text-green-400
-            transition-colors duration-150
-          "
-        >
-          Talent →
-        </Link>
-      </div>
 
       {/* P&L Breakdown */}
       {player.lastTickBreakdown && (
@@ -303,7 +216,7 @@ export default function DashboardPage() {
       <div className="mt-auto border-t border-zinc-800 pt-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <p className="font-mono text-xs text-zinc-600 tracking-wider">
-            LIVE &nbsp;·&nbsp; v0.7
+            LIVE &nbsp;·&nbsp; v0.8
           </p>
           {gameDate && (
             <p className="font-mono text-xs tracking-wider">

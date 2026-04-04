@@ -44,3 +44,4 @@ next-env.d.ts
 /functions/lib
 /functions/node_modules
 .claude/
+.claude/settings.local.json

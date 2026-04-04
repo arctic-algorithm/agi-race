@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import {
   collection,
   doc,
@@ -539,23 +538,9 @@ export default function EnergyPage() {
 
   return (
     <div className="flex flex-1 flex-col p-6 gap-6 max-w-5xl mx-auto w-full">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-zinc-700 pb-4">
-        <div>
-          <h1 className="font-mono text-xl font-bold text-green-400 tracking-widest">
-            {player.companyName.toUpperCase()}
-          </h1>
-          <p className="font-mono text-xs text-zinc-500 mt-0.5 tracking-wider">
-            AGI RACE — ENERGY
-          </p>
-        </div>
-        <Link
-          href="/dashboard"
-          className="font-mono text-xs px-4 py-2 border border-zinc-600 rounded-sm text-zinc-400 hover:border-zinc-400 hover:text-zinc-100 transition-colors"
-        >
-          Dashboard
-        </Link>
-      </div>
+      <h1 className="font-mono text-sm font-bold text-zinc-100 tracking-widest uppercase border-b border-zinc-700 pb-4">
+        Energy
+      </h1>
 
       {/* Toast */}
       {toast && (

@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { doc, onSnapshot } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
@@ -142,21 +141,9 @@ export default function LeaderboardPage() {
 
   return (
     <div className="flex flex-1 flex-col p-6 gap-6 max-w-5xl mx-auto w-full">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-zinc-700 pb-4">
-        <div>
-          <h1 className="text-green-400 font-mono text-2xl font-bold">AGI LEADERBOARD</h1>
-          <p className="font-mono text-xs text-zinc-500 mt-0.5 tracking-wider">
-            AGI RACE — RANKINGS
-          </p>
-        </div>
-        <Link
-          href="/dashboard"
-          className="font-mono text-xs px-4 py-2 border border-zinc-600 rounded-sm text-zinc-400 hover:border-zinc-400 hover:text-zinc-100 transition-colors duration-150"
-        >
-          ← Dashboard
-        </Link>
-      </div>
+      <h1 className="font-mono text-sm font-bold text-zinc-100 tracking-widest uppercase border-b border-zinc-700 pb-4">
+        Leaderboard
+      </h1>
 
       {/* Table */}
       <div className="bg-zinc-900 border border-zinc-700 rounded overflow-hidden">
