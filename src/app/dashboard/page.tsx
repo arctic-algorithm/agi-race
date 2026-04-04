@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { doc, onSnapshot } from 'firebase/firestore'
+import { doc, onSnapshot, collection, getDocs, writeBatch, deleteDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/context/AuthContext'
 import type { PlayerDoc } from '@/shared/types'
@@ -73,6 +73,8 @@ export default function DashboardPage() {
   const router = useRouter()
   const [player, setPlayer] = useState<PlayerDoc | null>(null)
   const [playerLoading, setPlayerLoading] = useState(true)
+  const [showResetConfirm, setShowResetConfirm] = useState(false)
+  const [resetting, setResetting] = useState(false)
 
   useEffect(() => {
     if (!loading && !user) {
@@ -100,6 +102,28 @@ export default function DashboardPage() {
   const tickCountdown = useTickCountdown(player?.lastTickAt)
   const interpolatedResearch = useInterpolatedResearch(player)
   const gameDate = useGameDate(player?.createdAt ?? Date.now(), player?.lastTickAt)
+
+  async function handleReset() {
+    if (!user) return
+    setResetting(true)
+    const uid = user.uid
+    const SUBCOLLECTIONS = ['facilities', 'racks', 'energyBuildings', 'products', 'talent', 'actions', 'pressRoom']
+    // Delete all subcollection docs in batches
+    for (const sub of SUBCOLLECTIONS) {
+      const snap = await getDocs(collection(db, 'players', uid, sub))
+      const chunks: typeof snap.docs[] = []
+      for (let i = 0; i < snap.docs.length; i += 499) chunks.push(snap.docs.slice(i, i + 499))
+      for (const chunk of chunks) {
+        const batch = writeBatch(db)
+        chunk.forEach(d => batch.delete(d.ref))
+        await batch.commit()
+      }
+    }
+    // Delete trainingRun/current doc
+    await deleteDoc(doc(db, 'players', uid, 'trainingRun', 'current')).catch(() => {})
+    // Delete player doc — onSnapshot will redirect to /onboarding
+    await deleteDoc(doc(db, 'players', uid))
+  }
 
   if (loading || playerLoading) {
     return (
@@ -222,7 +246,7 @@ export default function DashboardPage() {
       <div className="mt-auto border-t border-zinc-800 pt-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <p className="font-mono text-xs text-zinc-600 tracking-wider">
-            LIVE &nbsp;·&nbsp; v0.10
+            LIVE &nbsp;·&nbsp; v0.11
           </p>
           {gameDate && (
             <p className="font-mono text-xs tracking-wider">
@@ -231,13 +255,51 @@ export default function DashboardPage() {
             </p>
           )}
         </div>
-        <p className="font-mono text-xs tracking-wider">
-          <span className="text-zinc-600">NEXT TICK </span>
-          <span className={tickCountdown <= 5 ? 'text-green-400 animate-pulse' : 'text-zinc-400'}>
-            {tickCountdown}s
-          </span>
-        </p>
+        <div className="flex items-center gap-4">
+          <p className="font-mono text-xs tracking-wider">
+            <span className="text-zinc-600">NEXT TICK </span>
+            <span className={tickCountdown <= 5 ? 'text-green-400 animate-pulse' : 'text-zinc-400'}>
+              {tickCountdown}s
+            </span>
+          </p>
+          <button
+            onClick={() => setShowResetConfirm(true)}
+            className="font-mono text-xs text-zinc-700 hover:text-red-500 transition-colors"
+          >
+            Reset
+          </button>
+        </div>
       </div>
+
+      {/* Reset confirmation modal */}
+      {showResetConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-sm max-w-sm w-full mx-4 p-6 flex flex-col gap-4">
+            <p className="font-mono text-sm font-bold text-red-400 tracking-widest uppercase">
+              Reset Game?
+            </p>
+            <p className="font-mono text-xs text-zinc-400">
+              This will permanently delete all your progress — facilities, racks, money, research, everything. You&apos;ll start fresh from onboarding.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowResetConfirm(false)}
+                disabled={resetting}
+                className="font-mono text-xs px-4 py-2 border border-zinc-600 rounded-sm text-zinc-400 hover:border-zinc-300 hover:text-zinc-100 transition-colors disabled:opacity-40"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleReset}
+                disabled={resetting}
+                className="font-mono text-xs px-4 py-2 border border-red-700 rounded-sm text-red-400 hover:bg-red-900/30 transition-colors disabled:opacity-40"
+              >
+                {resetting ? 'Resetting…' : 'Yes, Reset'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
