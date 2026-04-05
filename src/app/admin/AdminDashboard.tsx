@@ -15,6 +15,7 @@ import {
   RESEARCH_MILESTONES,
   BUILD_TIME_MULTIPLIERS,
   CLOUD_CONFIG,
+  GRID_CONFIG,
   PUBLIC_CONTRACT_CONFIG,
 } from '@/shared/config'
 
@@ -32,6 +33,7 @@ function buildDefaultConfig(): NestedConfig {
   return {
     global: deepClone(GLOBAL_CONFIG) as unknown as NestedConfig,
     cloud: deepClone(CLOUD_CONFIG) as unknown as NestedConfig,
+    grid: deepClone(GRID_CONFIG) as unknown as NestedConfig,
     publicContract: deepClone(PUBLIC_CONTRACT_CONFIG) as unknown as NestedConfig,
     product: {
       consumer: deepClone(PRODUCT_CONFIG.consumer) as unknown as NestedConfig,
@@ -274,6 +276,8 @@ export default function AdminDashboard() {
   const dg = defaults.current.global as NestedConfig
   const cl = config.cloud as NestedConfig
   const dcl = defaults.current.cloud as NestedConfig
+  const gr = config.grid as NestedConfig
+  const dgr = defaults.current.grid as NestedConfig
   const pc = config.publicContract as NestedConfig
   const dpc = defaults.current.publicContract as NestedConfig
   const prod = config.product as NestedConfig
@@ -355,6 +359,13 @@ export default function AdminDashboard() {
         <Section title="Cloud Token Rental">
           <NumericField label="Base Cost per t/s per Month ($)" value={cl.baseCostPerTps as number} defaultValue={dcl.baseCostPerTps as number} onChange={(v) => setField('cloud', 'baseCostPerTps', v)} step={1} min={0} />
           <NumericField label="Scaling Factor" value={cl.scalingFactor as number} defaultValue={dcl.scalingFactor as number} onChange={(v) => setField('cloud', 'scalingFactor', v)} step={0.0001} min={0} />
+        </Section>
+
+        {/* ── Grid Config ── */}
+        <Section title="Grid & Cloud Slider Limits">
+          <NumericField label="Max Cloud Rental (t/s)" value={gr.maxCloudRentalTps as number} defaultValue={dgr.maxCloudRentalTps as number} onChange={(v) => setField('grid', 'maxCloudRentalTps', v)} step={1000} min={0} />
+          <NumericField label="Max Public Grid Units" value={gr.maxPublicGridUnits as number} defaultValue={dgr.maxPublicGridUnits as number} onChange={(v) => setField('grid', 'maxPublicGridUnits', v)} step={1000} min={0} />
+          <NumericField label="Public Grid Cost per Unit per Month ($)" value={gr.publicGridCostPerUnitPerMonth as number} defaultValue={dgr.publicGridCostPerUnitPerMonth as number} onChange={(v) => setField('grid', 'publicGridCostPerUnitPerMonth', v)} step={10} min={0} />
         </Section>
 
         {/* ── Public Contract ── */}

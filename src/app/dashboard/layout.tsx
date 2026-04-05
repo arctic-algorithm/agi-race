@@ -20,7 +20,9 @@ const NAV_ITEMS = [
   { href: '/dashboard/allocation', label: 'Allocation' },
   { href: '/dashboard/training', label: 'Training' },
   { href: '/dashboard/talent', label: 'Talent' },
+  { href: '/dashboard/press', label: 'Press Room' },
   { href: '/dashboard/leaderboard', label: 'Leaderboard' },
+  { href: '/dashboard/charts', label: 'Charts' },
 ]
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {

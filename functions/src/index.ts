@@ -179,6 +179,17 @@ interface ActionDoc {
   processed: boolean
 }
 
+interface HistoryDoc {
+  money: number
+  profit: number
+  revenuePerDay: number
+  costsPerDay: number
+  researchScore: number
+  tokensPerSec: number
+  gameDate: string
+  timestamp: number
+}
+
 // ─── Idempotency guard ───────────────────────────────────────────────────────
 const IDEMPOTENCY_WINDOW_MS = 30_000 // 30 seconds
 
@@ -434,10 +445,32 @@ export const gameTick = onSchedule('every 1 minutes', async () => {
           .where('status', '==', 'building')
           .get()
 
+        let firstFacilityCompleted = false
         for (const fdoc of facilitiesSnap.docs) {
           const facility = fdoc.data() as FacilityDoc
           if (facility.completesAt <= now) {
             subUpdates.set(fdoc.ref, { data: { status: 'active' }, isNew: false })
+            firstFacilityCompleted = true
+          }
+        }
+
+        // Press Room: garage_built — first facility completes building
+        if (firstFacilityCompleted) {
+          const existingGarageBuilt = await db
+            .collection(`players/${playerId}/pressRoom`)
+            .where('event', '==', 'garage_built')
+            .limit(1)
+            .get()
+          if (existingGarageBuilt.empty) {
+            const pressRef = db.collection(`players/${playerId}/pressRoom`).doc(`garage_built_${now}`)
+            subUpdates.set(pressRef, {
+              data: {
+                event: 'garage_built',
+                headline: `${player.companyName} opens its first compute facility — the race is on.`,
+                createdAt: now,
+              },
+              isNew: true,
+            })
           }
         }
 
@@ -448,11 +481,33 @@ export const gameTick = onSchedule('every 1 minutes', async () => {
           .get()
 
         let newRackTps = 0
+        let firstRackCompleted = false
         for (const rdoc of racksDeliveringSnap.docs) {
           const rack = rdoc.data() as RackDoc
           if (rack.completesAt <= now) {
             subUpdates.set(rdoc.ref, { data: { status: 'active' }, isNew: false })
             newRackTps += rack.tokensPerSec
+            firstRackCompleted = true
+          }
+        }
+
+        // Press Room: first_rack_installed — first rack completes delivery
+        if (firstRackCompleted) {
+          const existingRackInstalled = await db
+            .collection(`players/${playerId}/pressRoom`)
+            .where('event', '==', 'first_rack_installed')
+            .limit(1)
+            .get()
+          if (existingRackInstalled.empty) {
+            const pressRef = db.collection(`players/${playerId}/pressRoom`).doc(`first_rack_installed_${now}`)
+            subUpdates.set(pressRef, {
+              data: {
+                event: 'first_rack_installed',
+                headline: `${player.companyName} installs its first GPU rack — silicon is humming.`,
+                createdAt: now,
+              },
+              isNew: true,
+            })
           }
         }
 
@@ -585,6 +640,27 @@ export const gameTick = onSchedule('every 1 minutes', async () => {
 
         playerUpdates['money'] = workingMoney + totalRevenueThisTick
         playerUpdates['totalRevenue'] = currentTotalRevenue + totalRevenueThisTick
+
+        // Press Room: first_1m_revenue — totalRevenue crosses $1,000,000
+        const newTotalRevenueForPress = currentTotalRevenue + totalRevenueThisTick
+        if (currentTotalRevenue < 1_000_000 && newTotalRevenueForPress >= 1_000_000) {
+          const existing1m = await db
+            .collection(`players/${playerId}/pressRoom`)
+            .where('event', '==', 'first_1m_revenue')
+            .limit(1)
+            .get()
+          if (existing1m.empty) {
+            const pressRef = db.collection(`players/${playerId}/pressRoom`).doc(`first_1m_revenue_${now}`)
+            subUpdates.set(pressRef, {
+              data: {
+                event: 'first_1m_revenue',
+                headline: `${player.companyName} crosses $1M in cumulative revenue — investors take notice.`,
+                createdAt: now,
+              },
+              isNew: true,
+            })
+          }
+        }
 
         // Track monthly revenue estimate for stock price calculation
         const monthlyRevenueEstimate = totalRevenueThisTick * GLOBAL_CONFIG.daysPerMonth
@@ -807,6 +883,23 @@ export const gameTick = onSchedule('every 1 minutes', async () => {
           | { kind: 'set'; ref: admin.firestore.DocumentReference; data: Record<string, unknown> }
           | { kind: 'delete'; ref: admin.firestore.DocumentReference }
 
+        // Compute game date for history snapshot
+        const GAME_EPOCH = new Date('2010-09-23').getTime()
+        const daysElapsed = Math.floor((now - player.createdAt) / (60 * 1000))
+        const gameD = new Date(GAME_EPOCH + daysElapsed * 86_400_000)
+        const gameDate = gameD.toISOString().split('T')[0]
+
+        const historyDoc: HistoryDoc = {
+          money: playerUpdates['money'] as number,
+          profit: totalRevenueThisTick - totalCostsThisTick,
+          revenuePerDay: totalRevenueThisTick,
+          costsPerDay: totalCostsThisTick,
+          researchScore: newResearchScore,
+          tokensPerSec: effectiveTps,
+          gameDate,
+          timestamp: now,
+        }
+
         const allOps: BatchOp[] = [
           { kind: 'update', ref: db.doc(`players/${playerId}`), data: playerUpdates },
           ...Array.from(subUpdates.entries()).map(([ref, entry]) => ({
@@ -815,6 +908,7 @@ export const gameTick = onSchedule('every 1 minutes', async () => {
             data: entry.data,
           })),
           ...Array.from(deletions).map((ref) => ({ kind: 'delete' as const, ref })),
+          { kind: 'set', ref: db.doc(`players/${playerId}/history/${now.toString()}`), data: historyDoc as unknown as Record<string, unknown> },
         ]
 
         // Chunk into batches of MAX_BATCH_OPS
