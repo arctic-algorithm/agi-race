@@ -127,6 +127,7 @@ interface PlayerDoc {
   publicContractUnits?: number
   ipoEligible?: boolean
   unlockedMilestones?: string[]
+  completedTrainingRuns?: number
 }
 
 interface FacilityDoc {
@@ -573,6 +574,13 @@ export const gameTick = onSchedule('every 1 minutes', async () => {
           }
         }
 
+        // Gate revenue behind completing at least one training run
+        const completedRuns = player.completedTrainingRuns ?? 0
+        if (completedRuns === 0) {
+          totalRevenueThisTick = 0
+          revenueBySlot.length = 0
+        }
+
         const currentTotalRevenue = player.totalRevenue ?? 0
 
         playerUpdates['money'] = workingMoney + totalRevenueThisTick
@@ -710,6 +718,9 @@ export const gameTick = onSchedule('every 1 minutes', async () => {
 
             // Set training run to idle
             subUpdates.set(trainingRunRef, { data: { status: 'idle' }, isNew: false })
+
+            // Increment completed training runs counter
+            playerUpdates['completedTrainingRuns'] = (player.completedTrainingRuns ?? 0) + 1
 
             // Add Press Room headline (new document)
             const pressRoomRef = db

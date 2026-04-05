@@ -25,7 +25,7 @@ export const GLOBAL_CONFIG = {
 
 export const CLOUD_CONFIG = {
   /** Base cost per token/sec per game month at low usage */
-  baseCostPerTps: 100,
+  baseCostPerTps: 10,
   /** Scaling factor — cost multiplier applied per 1,000 t/s rented */
   scalingFactor: 0.0001,
 } as const

@@ -55,6 +55,7 @@ export interface TokenAllocation {
 
 export interface PlayerDoc {
   companyName: string
+  country: string
   market: Market
   money: number
   talentCount: number
@@ -68,6 +69,7 @@ export interface PlayerDoc {
   /** Only meaningful post-IPO */
   stockPrice: number
   debt: number
+  completedTrainingRuns?: number
   createdAt: number // Unix ms timestamp
   /** Tokens/sec rented from cloud — user-controlled slider (0 to GRID_CONFIG.maxCloudRentalTps) */
   cloudRentalTps?: number

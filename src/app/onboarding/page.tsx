@@ -23,10 +23,26 @@ const MARKETS: { value: Market; label: string; description: string }[] = [
   },
 ]
 
+const COUNTRIES = [
+  { value: 'US', label: 'United States' },
+  { value: 'UK', label: 'United Kingdom' },
+  { value: 'CN', label: 'China' },
+  { value: 'IN', label: 'India' },
+  { value: 'DE', label: 'Germany' },
+  { value: 'JP', label: 'Japan' },
+  { value: 'KR', label: 'South Korea' },
+  { value: 'FR', label: 'France' },
+  { value: 'CA', label: 'Canada' },
+  { value: 'IL', label: 'Israel' },
+  { value: 'SG', label: 'Singapore' },
+  { value: 'AE', label: 'UAE' },
+]
+
 export default function OnboardingPage() {
   const { user, loading } = useAuth()
   const router = useRouter()
   const [selected, setSelected] = useState<Market | null>(null)
+  const [country, setCountry] = useState<string>('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -37,7 +53,7 @@ export default function OnboardingPage() {
   }, [user, loading, router])
 
   async function handleConfirm() {
-    if (!selected || !user) return
+    if (!selected || !user || !country) return
     setSaving(true)
     setError(null)
 
@@ -45,6 +61,7 @@ export default function OnboardingPage() {
       const companyName = `${user.displayName ?? 'Unknown'}'s Lab`
       const playerDoc: PlayerDoc = {
         companyName,
+        country,
         market: selected,
         money: GLOBAL_CONFIG.seedFunding,
         talentCount: 0,
@@ -55,6 +72,7 @@ export default function OnboardingPage() {
         totalRevenue: 0,
         stockPrice: 0,
         debt: 0,
+        completedTrainingRuns: 0,
         createdAt: Date.now(),
       }
 
@@ -122,9 +140,28 @@ export default function OnboardingPage() {
           ))}
         </div>
 
+        <div>
+          <h2 className="font-mono text-sm font-bold text-green-400 tracking-widest mb-1 uppercase">
+            Headquarters
+          </h2>
+          <p className="font-mono text-xs text-zinc-500 mb-3">
+            Where is your AI lab based?
+          </p>
+          <select
+            value={country}
+            onChange={(e) => setCountry(e.target.value)}
+            className="w-full p-3 font-mono text-sm bg-zinc-900 border border-zinc-700 rounded-sm text-zinc-300 focus:border-green-500 focus:outline-none transition-colors"
+          >
+            <option value="" disabled>Select a country…</option>
+            {COUNTRIES.map((c) => (
+              <option key={c.value} value={c.value}>{c.label}</option>
+            ))}
+          </select>
+        </div>
+
         <button
           onClick={handleConfirm}
-          disabled={!selected || saving}
+          disabled={!selected || !country || saving}
           className="
             w-full py-3 font-mono text-sm tracking-wider uppercase
             border border-zinc-600 rounded-sm

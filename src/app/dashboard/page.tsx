@@ -142,9 +142,18 @@ export default function DashboardPage() {
         Overview
       </h1>
 
+      {/* Training run gate banner */}
+      {!player.completedTrainingRuns && (
+        <div className="border border-amber-700/50 bg-amber-900/20 rounded-sm px-4 py-3">
+          <p className="font-mono text-xs text-amber-400">
+            Complete a training run to start earning revenue from your products.
+          </p>
+        </div>
+      )}
+
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <StatCard label="Company" value={player.companyName} />
+        <StatCard label="Company" value={`${player.companyName}${player.country ? ` · ${player.country}` : ''}`} />
         <StatCard label="Balance" value={formatMoney(Math.round(player.money))} highlight />
         <StatCard
           label="Market"
@@ -246,7 +255,7 @@ export default function DashboardPage() {
       <div className="mt-auto border-t border-zinc-800 pt-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <p className="font-mono text-xs text-zinc-600 tracking-wider">
-            LIVE &nbsp;·&nbsp; v0.12
+            LIVE &nbsp;·&nbsp; v0.13
           </p>
           {gameDate && (
             <p className="font-mono text-xs tracking-wider">
