@@ -203,6 +203,7 @@ export type ActionType =
   | 'start_training_run'
   | 'hire_talent'
   | 'poach_talent'
+  | 'defend_poach'
   | 'buy_cloud_tokens'
   | 'take_on_debt'
   | 'launch_ipo'
@@ -218,6 +219,17 @@ export interface ActionDoc {
   /** Set by the tick function after processing */
   processedAt?: number
   error?: string
+}
+
+// ─── /poachAttempts/{attemptId} ───────────────────────────────────────────────
+
+export interface PoachAttemptDoc {
+  attackerId: string
+  targetId: string
+  bonusOffer: number
+  status: 'pending' | 'succeeded' | 'defended'
+  createdAt: number // Unix ms
+  expiresAt: number // Unix ms
 }
 
 // ─── /global/leaderboard ──────────────────────────────────────────────────────

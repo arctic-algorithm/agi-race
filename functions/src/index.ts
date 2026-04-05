@@ -179,6 +179,30 @@ interface ActionDoc {
   processed: boolean
 }
 
+interface LeaderboardEntry {
+  playerId: string
+  companyName: string
+  researchScore: number
+  tokensPerSec: number
+  fcf: number
+  stockPrice: number
+  isPublic: boolean
+}
+
+interface LeaderboardDoc {
+  players: LeaderboardEntry[]
+  updatedAt: number
+}
+
+interface PoachAttemptDoc {
+  attackerId: string
+  targetId: string
+  bonusOffer: number
+  status: 'pending' | 'succeeded' | 'defended'
+  createdAt: number
+  expiresAt: number
+}
+
 interface HistoryDoc {
   money: number
   profit: number
@@ -387,6 +411,79 @@ export const gameTick = onSchedule('every 1 minutes', async () => {
             talentCountDelta += 1
             workingMoney -= hireCost
 
+          } else if (action.type === 'poach_talent') {
+            const targetPlayerId = action.payload['targetPlayerId'] as string
+            const bonusOffer = action.payload['bonusOffer'] as number
+            if (!targetPlayerId || !bonusOffer || bonusOffer <= 0) {
+              subUpdates.set(actionDoc.ref, { data: { processed: true }, isNew: false })
+              continue
+            }
+            // Check attacker can afford
+            if (workingMoney < bonusOffer) {
+              subUpdates.set(actionDoc.ref, { data: { processed: true }, isNew: false })
+              continue
+            }
+            // Check no existing active poach from this attacker
+            const existingPoachSnap = await db.collection('poachAttempts')
+              .where('attackerId', '==', playerId)
+              .where('status', '==', 'pending')
+              .limit(1)
+              .get()
+            if (!existingPoachSnap.empty) {
+              subUpdates.set(actionDoc.ref, { data: { processed: true }, isNew: false })
+              continue
+            }
+            // Check target exists and has >= 2 talent
+            const targetSnap = await db.doc(`players/${targetPlayerId}`).get()
+            if (!targetSnap.exists) {
+              subUpdates.set(actionDoc.ref, { data: { processed: true }, isNew: false })
+              continue
+            }
+            const targetPlayer = targetSnap.data() as PlayerDoc
+            if ((targetPlayer.talentCount ?? 0) < 2) {
+              subUpdates.set(actionDoc.ref, { data: { processed: true }, isNew: false })
+              continue
+            }
+            // Validate minimum premium: bonusOffer >= poachMinPremium * target's next hire cost
+            const targetNextHireCost = DEFAULT_TALENT_CONFIG_FULL.firstHireCost * Math.pow(DEFAULT_TALENT_CONFIG_FULL.hireCostMultiplier, targetPlayer.talentCount ?? 0)
+            const minBonus = targetNextHireCost * 0.1 // poachMinPremium = 0.1
+            if (bonusOffer < minBonus) {
+              subUpdates.set(actionDoc.ref, { data: { processed: true }, isNew: false })
+              continue
+            }
+            // Create poach attempt doc (top-level collection, outside batch)
+            const poachRef = db.collection('poachAttempts').doc()
+            const defenseWindowMs = 12 * 60 * 60 * 1000 // 12 hours
+            await poachRef.set({
+              attackerId: playerId,
+              targetId: targetPlayerId,
+              bonusOffer,
+              status: 'pending',
+              createdAt: now,
+              expiresAt: now + defenseWindowMs,
+            })
+            // Escrow: deduct bonusOffer from attacker
+            workingMoney -= bonusOffer
+
+          } else if (action.type === 'defend_poach') {
+            // Find the pending poach attempt targeting this player
+            const incomingPoachSnap = await db.collection('poachAttempts')
+              .where('targetId', '==', playerId)
+              .where('status', '==', 'pending')
+              .limit(1)
+              .get()
+            if (!incomingPoachSnap.empty) {
+              const poachDoc = incomingPoachSnap.docs[0]
+              const poachData = poachDoc.data() as PoachAttemptDoc
+              // Defend: set status to defended, refund attacker
+              await poachDoc.ref.update({ status: 'defended' })
+              // Refund the attacker's escrowed money
+              const attackerRef = db.doc(`players/${poachData.attackerId}`)
+              await attackerRef.update({
+                money: admin.firestore.FieldValue.increment(poachData.bonusOffer),
+              })
+            }
+
           } else if (action.type === 'start_training_run') {
             const targetSlot = action.payload['targetSlot'] as string
             const trainingRef = db.doc(`players/${playerId}/trainingRun/current`)
@@ -405,6 +502,45 @@ export const gameTick = onSchedule('every 1 minutes', async () => {
         // Apply talent count changes from actions
         if (talentCountDelta > 0) {
           playerUpdates['talentCount'] = (player.talentCount ?? 0) + talentCountDelta
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // STEP 0.5 — Resolve expired poach attempts
+        // ─────────────────────────────────────────────────────────────────────
+
+        const expiredPoachSnap = await db.collection('poachAttempts')
+          .where('status', '==', 'pending')
+          .where('expiresAt', '<=', now)
+          .get()
+
+        for (const pDoc of expiredPoachSnap.docs) {
+          const poach = pDoc.data() as PoachAttemptDoc
+          // Transfer talent: target loses 1, attacker gains 1
+          const poachTargetRef = db.doc(`players/${poach.targetId}`)
+          const poachAttackerRef = db.doc(`players/${poach.attackerId}`)
+
+          await pDoc.ref.update({ status: 'succeeded' })
+          await poachTargetRef.update({
+            talentCount: admin.firestore.FieldValue.increment(-1),
+          })
+          await poachAttackerRef.update({
+            talentCount: admin.firestore.FieldValue.increment(1),
+          })
+
+          // If this player is the attacker, update local talentCountDelta
+          if (poach.attackerId === playerId) {
+            talentCountDelta += 1
+            // Add press room entry for attacker
+            const pressRef = db.collection(`players/${playerId}/pressRoom`).doc(`poach_success_${now}`)
+            subUpdates.set(pressRef, {
+              data: {
+                event: 'first_takeover_won' as const,
+                headline: `${player.companyName} successfully poaches a top researcher from a rival lab.`,
+                createdAt: now,
+              },
+              isNew: true,
+            })
+          }
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -939,6 +1075,33 @@ export const gameTick = onSchedule('every 1 minutes', async () => {
       }
     })
   )
+
+  // ── Leaderboard aggregation ──
+  try {
+    const freshPlayersSnap = await db.collection('players').get()
+    const entries: LeaderboardEntry[] = freshPlayersSnap.docs.map((doc) => {
+      const p = doc.data() as PlayerDoc & { revenuePerDay?: number; costsPerDay?: number }
+      const revenuePerDay = p.revenuePerDay ?? 0
+      const costsPerDay = p.costsPerDay ?? 0
+      const fcf = (revenuePerDay - costsPerDay) * GLOBAL_CONFIG.daysPerMonth
+      return {
+        playerId: doc.id,
+        companyName: p.companyName ?? 'Unknown',
+        researchScore: p.researchScore ?? 0,
+        tokensPerSec: p.tokensPerSec ?? 0,
+        fcf,
+        stockPrice: p.stockPrice ?? 0,
+        isPublic: p.isPublic ?? false,
+      }
+    })
+    entries.sort((a, b) => b.researchScore - a.researchScore)
+
+    const leaderboardDoc: LeaderboardDoc = { players: entries, updatedAt: now }
+    await db.doc('/global/leaderboard').set(leaderboardDoc)
+    logger.info(`Leaderboard updated with ${entries.length} players`)
+  } catch (err) {
+    logger.error('Failed to update leaderboard', { err })
+  }
 
   logger.info(`Game tick complete — ${playersSnap.size} players processed`)
 })
